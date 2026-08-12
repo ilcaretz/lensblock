@@ -2,6 +2,8 @@
 
 **Previsualisation and 3D blockout in a single HTML file.**
 
+### ▶ [Open LensBlock](https://ilcaretz.github.io/lensblock/)
+
 ![LensBlock — a blockout set in the 3D view above, the same moment framed through a 35mm shot camera below, with the pose panel, graph editor and timeline alongside](docs/screenshot.png)
 
 *Split view: the free 3D perspective above, the shot camera's POV below, gated to
@@ -18,11 +20,14 @@ requests, needs no build step and no server, and runs offline from a local disk.
 
 ## Run it
 
-Download [`V01/previz.html`](V01/previz.html) and double-click it.
+In the browser: **[ilcaretz.github.io/lensblock](https://ilcaretz.github.io/lensblock/)**
+
+Offline: download [`V01/previz.html`](V01/previz.html) and double-click it.
 
 That is the entire installation procedure. No Node.js, no Python, no npm, no
 local server, no internet connection. You can put it on a USB stick, email it, or
-run it on a machine that has never been online.
+run it on a machine that has never been online — the page makes zero network
+requests either way.
 
 ## What it does
 
