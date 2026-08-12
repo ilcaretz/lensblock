@@ -1,0 +1,22 @@
+# build deps — recreated by _build/build.cmd
+node_modules/
+
+# harness output: screenshots and reports are regenerated on every run
+_test/look-*.png
+_test/shot-*.png
+_test/check-report.json
+
+# orphaned extract of an older previz.html — not referenced by anything
+_app.check.js
+
+# internal session log, deliberately not published
+HANDOFF.md
+
+# local tooling config
+.claude/
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp

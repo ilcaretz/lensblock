@@ -1,0 +1,3091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PreViz — 3D Blockout &amp; Camera Previs</title>
+<style>
+:root{
+  --bg:#17171a; --panel:#1f1f23; --panel2:#26262b; --panel3:#2e2e34;
+  --line:#33333b; --line2:#3f3f48;
+  --text:#dcdce2; --dim:#8b8b96; --dim2:#6a6a74;
+  --accent:#4f8cff; --accent2:#78a9ff; --key:#f0a92b; --key2:#ffc866;
+  --ok:#54c98a; --warn:#ff6b6b;
+  --r:5px; --h:26px;
+  --font:"Inter",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"SF Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg);color:var(--text);
+  font:12px/1.45 var(--font);
+  user-select:none;cursor:default;
+}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#3a3a42;border-radius:5px;border:2px solid var(--panel)}
+::-webkit-scrollbar-thumb:hover{background:#4a4a54}
+
+/* ---------- app grid ---------- */
+#app{
+  display:grid;height:100%;
+  grid-template-columns:216px 1fr 296px;
+  grid-template-rows:42px 1fr 112px;
+  grid-template-areas:"top top top" "left view right" "bot bot bot";
+  gap:1px;background:var(--line);
+}
+.pane{background:var(--panel);overflow:hidden;display:flex;flex-direction:column;min-width:0;min-height:0}
+#topbar{grid-area:top}
+#leftPane{grid-area:left}
+#viewPane{grid-area:view;background:#000;position:relative}
+#rightPane{grid-area:right}
+#botPane{grid-area:bot}
+
+/* ---------- topbar ---------- */
+#topbar{flex-direction:row;align-items:center;gap:6px;padding:0 10px;background:var(--panel2)}
+.brand{font-weight:650;letter-spacing:.14em;font-size:10.5px;color:var(--dim);margin-right:4px;white-space:nowrap}
+.brand b{color:var(--accent);font-weight:700}
+.sep{width:1px;height:20px;background:var(--line2);flex:0 0 auto;margin:0 3px}
+.grow{flex:1 1 auto}
+
+/* ---------- controls ---------- */
+button{
+  font:inherit;color:var(--text);background:var(--panel3);
+  border:1px solid transparent;border-radius:var(--r);
+  height:var(--h);padding:0 9px;cursor:pointer;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  transition:background .1s,color .1s;flex:0 0 auto;
+}
+button:hover{background:#3a3a42}
+button:active{background:#444450}
+button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+button.on:hover{background:var(--accent2)}
+button.ghost{background:transparent;color:var(--dim)}
+button.ghost:hover{background:var(--panel3);color:var(--text)}
+button.danger:hover{background:#5a2a2e;color:#ffb3b8}
+button:disabled{opacity:.35;pointer-events:none}
+button.icon{width:var(--h);padding:0}
+button.wide{width:100%}
+.mini{height:21px;font-size:11px;padding:0 7px}
+
+input,select{
+  font:inherit;color:var(--text);background:#191a1e;
+  border:1px solid var(--line2);border-radius:var(--r);
+  height:var(--h);padding:0 7px;min-width:0;width:100%;
+  outline:none;transition:border-color .1s;
+}
+input:focus,select:focus{border-color:var(--accent)}
+input[type=number]{font-family:var(--mono);font-size:11.5px;-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button{display:none}
+select{cursor:pointer;padding-right:4px}
+input[type=checkbox]{width:14px;height:14px;accent-color:var(--accent);cursor:pointer}
+label{color:var(--dim);font-size:11px;white-space:nowrap}
+
+/* range */
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;height:16px;padding:0;border:0}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line2)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;margin-top:-4px;border-radius:50%;background:var(--text);cursor:grab;border:0}
+input[type=range]:hover::-webkit-slider-thumb{background:var(--accent2)}
+input[type=range]:active::-webkit-slider-thumb{background:var(--accent);cursor:grabbing}
+input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:var(--line2)}
+input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:var(--text)}
+
+/* ---------- panel sections ---------- */
+.hdr{
+  display:flex;align-items:center;gap:6px;height:26px;flex:0 0 auto;
+  padding:0 10px;font-size:10px;font-weight:650;letter-spacing:.1em;
+  color:var(--dim2);text-transform:uppercase;background:var(--panel);
+  border-bottom:1px solid var(--line);
+}
+.hdr .grow{flex:1}
+.body{overflow-y:auto;overflow-x:hidden;flex:1 1 auto;min-height:0}
+.sect{border-bottom:1px solid var(--line);padding:8px 10px 10px}
+.sect.collapsed>*:not(.stitle){display:none}
+.stitle{
+  display:flex;align-items:center;gap:5px;cursor:pointer;
+  font-size:10px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--dim);margin:0 0 8px;height:16px;
+}
+.sect.collapsed .stitle{margin-bottom:0}
+.stitle:hover{color:var(--text)}
+.stitle .tw{width:8px;font-size:8px;color:var(--dim2);transition:transform .12s}
+.sect.collapsed .stitle .tw{transform:rotate(-90deg)}
+
+.row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.row:last-child{margin-bottom:0}
+.row>label:first-child{width:58px;flex:0 0 auto}
+.row .num{width:100%;text-align:right}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.axl{display:grid;grid-template-columns:12px 1fr;gap:4px;align-items:center}
+.axl>span{font-family:var(--mono);font-size:10px;color:var(--dim2);text-align:center}
+.ax-x>span{color:#e06c7a}.ax-y>span{color:#8fca5c}.ax-z>span{color:#5a9cf0}
+.hint{color:var(--dim2);font-size:10.5px;line-height:1.5}
+.chips{display:flex;flex-wrap:wrap;gap:3px}
+.chip{
+  height:19px;padding:0 6px;border-radius:3px;background:var(--panel3);
+  color:var(--dim);font-family:var(--mono);font-size:10px;cursor:pointer;border:0;
+}
+.chip:hover{background:#41414a;color:var(--text)}
+.chip.on{background:var(--accent);color:#fff}
+
+/* ---------- outliner ---------- */
+#outliner{padding:4px}
+.item{
+  display:flex;align-items:center;gap:6px;height:23px;padding:0 6px;
+  border-radius:4px;cursor:pointer;color:var(--text);font-size:11.5px;
+}
+.item:hover{background:var(--panel2)}
+.item.sel{background:var(--accent);color:#fff}
+.item .ico{width:11px;text-align:center;font-size:10px;opacity:.7;flex:0 0 auto}
+.item.sel .ico{opacity:1}
+.item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .tag{font-family:var(--mono);font-size:9px;color:var(--dim2);opacity:.9}
+.item.sel .tag{color:rgba(255,255,255,.75)}
+.item .eye{width:14px;text-align:center;font-size:9px;color:var(--dim2);opacity:0;flex:0 0 auto}
+.item:hover .eye,.item .eye.off{opacity:1}
+.item .eye.off{color:var(--warn)}
+.item input.rn{height:19px;font-size:11.5px;padding:0 4px;flex:1}
+.empty{color:var(--dim2);font-size:11px;text-align:center;padding:22px 12px;line-height:1.6}
+
+/* ---------- viewport ---------- */
+#viewWrap{position:absolute;inset:0;overflow:hidden}
+#glcanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#viewHud{
+  position:absolute;top:8px;left:10px;right:10px;display:flex;gap:6px;
+  align-items:flex-start;pointer-events:none;font-family:var(--mono);font-size:10.5px;
+}
+.hud{
+  background:rgba(14,14,17,.72);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.07);border-radius:4px;
+  padding:3px 7px;color:var(--dim);pointer-events:auto;
+}
+.hud b{color:var(--text);font-weight:600}
+.hud .k{color:var(--key2)}
+#viewTools{
+  position:absolute;top:8px;right:10px;display:flex;flex-direction:column;gap:4px;align-items:flex-end;
+}
+#viewTools .tg{
+  height:22px;font-size:10px;padding:0 7px;background:rgba(14,14,17,.72);
+  backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.07);
+}
+#navHelp{
+  position:absolute;bottom:8px;left:10px;font-family:var(--mono);font-size:10px;
+  color:var(--dim2);background:rgba(14,14,17,.6);border-radius:4px;padding:4px 8px;
+  pointer-events:none;line-height:1.6;
+}
+#navHelp kbd{color:var(--dim);background:rgba(255,255,255,.06);border-radius:2px;padding:0 3px}
+#toast{
+  position:absolute;bottom:16px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:var(--panel3);border:1px solid var(--line2);border-radius:5px;
+  padding:6px 13px;font-size:11.5px;pointer-events:none;opacity:0;
+  transition:opacity .18s,transform .18s;white-space:nowrap;z-index:20;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:#7a3a3f;color:#ffb3b8}
+
+/* ---------- timeline ---------- */
+#botPane{padding:0}
+#tlTop{
+  display:flex;align-items:center;gap:5px;padding:6px 10px;flex:0 0 auto;
+  border-bottom:1px solid var(--line);
+}
+#tlTop .fnum{width:62px}
+#tlTop .rng{width:56px}
+#tlWrap{flex:1 1 auto;position:relative;min-height:0;padding:0 10px 8px}
+/* A <canvas> is a replaced element with an intrinsic ratio from its width/height
+   attributes. Give it a width but leave height:auto and CSS resolves the height
+   from that ratio and drops `bottom` as over-constrained — the strip ballooned to
+   width/2 px tall, and resizeTimeline() baked that back into the height attribute,
+   so it stuck. The key diamonds sit at mid-track and ended up ~320px below the
+   visible strip. Both axes must be stated explicitly. */
+#tlCanvas{position:absolute;top:0;left:10px;width:calc(100% - 20px);height:calc(100% - 8px);cursor:ew-resize;display:block}
+.pill{
+  font-family:var(--mono);font-size:10.5px;color:var(--dim);
+  background:#191a1e;border:1px solid var(--line2);border-radius:var(--r);
+  height:var(--h);display:inline-flex;align-items:center;padding:0 8px;flex:0 0 auto;
+}
+.pill b{color:var(--text);font-weight:600}
+
+/* ---------- modal ---------- */
+.scrim{
+  position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:100;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .14s;
+}
+.scrim.show{opacity:1;pointer-events:auto}
+.modal{
+  background:var(--panel);border:1px solid var(--line2);border-radius:8px;
+  width:472px;max-width:92vw;max-height:88vh;display:flex;flex-direction:column;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);transform:translateY(-6px);transition:transform .14s;
+}
+.scrim.show .modal{transform:none}
+.modal>.mh{
+  display:flex;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line);
+  font-size:12px;font-weight:650;letter-spacing:.02em;
+}
+.modal>.mb{padding:12px 14px;overflow-y:auto;flex:1 1 auto}
+.modal>.mf{display:flex;gap:7px;padding:11px 14px;border-top:1px solid var(--line);justify-content:flex-end}
+.mrow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.mrow>label:first-child{width:98px;flex:0 0 auto}
+.prog{height:5px;border-radius:3px;background:var(--panel3);overflow:hidden;margin:10px 0 6px}
+.prog>i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s}
+.plog{
+  font-family:var(--mono);font-size:10.5px;color:var(--dim);background:#141418;
+  border-radius:4px;padding:7px 9px;max-height:120px;overflow-y:auto;white-space:pre-wrap;
+  user-select:text;
+}
+kbd{
+  font-family:var(--mono);font-size:10px;background:var(--panel3);color:var(--text);
+  border-radius:3px;padding:1px 5px;border-bottom:1px solid #15151a;
+}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;align-items:center;font-size:11.5px}
+.keys .kg{grid-column:1/-1;font-size:10px;font-weight:650;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--dim2);margin-top:9px}
+.keys .kg:first-child{margin-top:0}
+
+/* ---------- boot / fatal ---------- */
+#boot{
+  position:fixed;inset:0;background:var(--bg);z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+}
+#boot .bt{font-size:12px;letter-spacing:.16em;color:var(--dim);font-weight:600}
+#boot .bs{width:150px;height:2px;background:var(--panel3);overflow:hidden;border-radius:2px}
+#boot .bs>i{display:block;height:100%;width:40%;background:var(--accent);
+  animation:sl 1.1s ease-in-out infinite}
+@keyframes sl{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+#boot .berr{max-width:460px;text-align:center;color:#ffb3b8;font-size:12px;line-height:1.7;user-select:text}
+#boot .bhint{max-width:460px;text-align:center;color:var(--dim2);font-size:11px;line-height:1.7;user-select:text}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="bt">P R E V I Z</div>
+  <div class="bs"><i></i></div>
+  <div id="bootMsg" class="bhint">loading three.js r185…</div>
+</div>
+
+<div id="app" hidden>
+
+  <!-- ============ TOPBAR ============ -->
+  <div class="pane" id="topbar">
+    <div class="brand"><b>PRE</b>VIZ</div>
+    <div class="sep"></div>
+    <button data-add="box"      title="Add Cube">▪ Cube</button>
+    <button data-add="sphere"   title="Add Sphere">● Sphere</button>
+    <button data-add="cylinder" title="Add Cylinder">▮ Cyl</button>
+    <button data-add="cone"     title="Add Cone">▲ Cone</button>
+    <button data-add="plane"    title="Add Plane">▬ Plane</button>
+    <button data-add="figure"   title="Add 1.8 m human reference">☖ Human</button>
+    <div class="sep"></div>
+    <button id="addCam"  title="Add shot camera">🎥 Camera</button>
+    <button id="addNull" title="Add null / aim target">✛ Null</button>
+    <div class="sep"></div>
+    <button data-giz="pick"      title="Select tool  (Q)">⬚</button>
+    <button data-giz="translate" class="on" title="Move  (W)">✥</button>
+    <button data-giz="rotate"    title="Rotate  (E)">⟳</button>
+    <button data-giz="scale"     title="Scale  (R)">⤢</button>
+    <div class="sep"></div>
+    <button id="btnDup"  class="ghost" title="Duplicate selected  (Ctrl+D)">Duplicate</button>
+    <button id="btnDel"  class="ghost danger" title="Delete selected  (Del)">Delete</button>
+    <div class="grow"></div>
+    <button id="btnKeys" class="ghost" title="Keyboard shortcuts">⌨</button>
+    <button id="btnNew"  class="ghost" title="New scene">New</button>
+    <button id="btnSave" class="ghost" title="Save scene .json">Save</button>
+    <button id="btnLoad" class="ghost" title="Load scene .json">Load</button>
+    <div class="sep"></div>
+    <button id="btnExport" class="on" title="Render / export video">⬤ Render</button>
+  </div>
+
+  <!-- ============ OUTLINER ============ -->
+  <div class="pane" id="leftPane">
+    <div class="hdr"><span class="grow">Outliner</span><span id="objCount" style="font-family:var(--mono)">0</span></div>
+    <div class="body"><div id="outliner"></div></div>
+  </div>
+
+  <!-- ============ VIEWPORT ============ -->
+  <div class="pane" id="viewPane">
+    <div id="viewWrap">
+      <canvas id="glcanvas"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="viewHud">
+        <div class="hud" id="hudCam">persp</div>
+        <div class="hud" id="hudLens">—</div>
+        <div class="hud" id="hudFrame">f <b>1</b></div>
+      </div>
+      <div id="viewTools">
+        <div style="display:flex;gap:3px">
+          <button class="tg on" data-lay="single" title="Single view">▢</button>
+          <button class="tg"    data-lay="vsplit" title="Split left / right — 3D | camera POV">◫</button>
+          <button class="tg"    data-lay="hsplit" title="Split top / bottom — 3D / camera POV">⬓</button>
+        </div>
+        <select id="povSel" class="tg" style="width:126px" title="Shot camera shown in the POV pane"></select>
+        <button class="tg on" id="tgGrid"  title="Toggle grid">grid</button>
+        <button class="tg on" id="tgGate"  title="Toggle gate mask / framing">gate</button>
+        <button class="tg"    id="tgGuide" title="Toggle safe-area &amp; thirds guides">guides</button>
+        <button class="tg"    id="tgPath"  title="Toggle motion paths">paths</button>
+        <button class="tg"    id="tgWire"  title="Toggle wireframe">wire</button>
+      </div>
+      <div id="navHelp">
+        <kbd>alt</kbd>+LMB tumble &nbsp; <kbd>alt</kbd>+MMB track &nbsp; <kbd>alt</kbd>+RMB / wheel dolly<br>
+        <kbd>Q</kbd>pick <kbd>W</kbd>move <kbd>E</kbd>rotate <kbd>R</kbd>scale <kbd>F</kbd>frame <kbd>S</kbd>key <kbd>C</kbd>look-thru <kbd>V</kbd>split
+      </div>
+      <div id="toast"></div>
+    </div>
+  </div>
+
+  <!-- ============ INSPECTOR ============ -->
+  <div class="pane" id="rightPane">
+    <div class="hdr"><span class="grow">Inspector</span><span id="inspName" style="color:var(--text);text-transform:none;letter-spacing:0;font-weight:500">—</span></div>
+    <div class="body" id="inspector"></div>
+  </div>
+
+  <!-- ============ TIMELINE ============ -->
+  <div class="pane" id="botPane">
+    <div id="tlTop">
+      <button class="icon" id="btnStart" title="Go to start">⏮</button>
+      <button class="icon" id="btnPrev"  title="Step back  (←)">◀</button>
+      <button class="icon on" id="btnPlay" title="Play / Pause  (Space)">▶</button>
+      <button class="icon" id="btnNext"  title="Step forward  (→)">▶</button>
+      <button class="icon" id="btnEnd"   title="Go to end">⏭</button>
+      <div class="sep"></div>
+      <label>frame</label><input type="number" class="fnum" id="curFrame" step="1">
+      <div class="sep"></div>
+      <label>range</label>
+      <input type="number" class="rng" id="rangeStart" step="1" title="Start frame">
+      <input type="number" class="rng" id="rangeEnd"   step="1" title="End frame">
+      <div class="sep"></div>
+      <label>fps</label>
+      <select id="fpsSel" style="width:78px">
+        <option value="12">12</option><option value="23.976">23.976</option>
+        <option value="24" selected>24</option><option value="25">25</option>
+        <option value="29.97">29.97</option><option value="30">30</option>
+        <option value="48">48</option><option value="60">60</option>
+      </select>
+      <div class="sep"></div>
+      <button id="btnKey"    title="Set key on selected  (S)">◆ Key</button>
+      <button id="btnKeyDel" class="ghost" title="Delete key at current frame  (Shift+S)">◇</button>
+      <button id="tgAuto"    class="ghost" title="Auto-key: record on every transform change">auto</button>
+      <button id="tgLoop"    class="on ghost" title="Loop playback">loop</button>
+      <div class="grow"></div>
+      <div class="pill" id="tlInfo">—</div>
+    </div>
+    <div id="tlWrap"><canvas id="tlCanvas"></canvas></div>
+  </div>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="scrim" id="mExport">
+  <div class="modal">
+    <div class="mh">Render Output</div>
+    <div class="mb" id="exportBody"></div>
+    <div class="mf">
+      <button id="expCancel" class="ghost">Cancel</button>
+      <button id="expGo" class="on">Render</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="mKeys">
+  <div class="modal">
+    <div class="mh">Keyboard Shortcuts</div>
+    <div class="mb"><div class="keys" id="keysBody"></div></div>
+    <div class="mf"><button id="keysClose" class="on">Close</button></div>
+  </div>
+</div>
+
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+/* ============================================================================
+   PREVIZ — single-file 3D pre-vis & blockout tool
+   Three.js r185 · WebCodecs/MediaRecorder export · Maya-style navigation
+   ========================================================================== */
+
+let THREE, TransformControls;
+try {
+  THREE = await import('three');
+  ({ TransformControls } = await import('three/addons/controls/TransformControls.js'));
+} catch (err) {
+  const b = document.getElementById('bootMsg');
+  document.querySelector('#boot .bs').style.display = 'none';
+  b.className = 'berr';
+  b.innerHTML = 'Could not load three.js from the CDN.<br><span style="color:var(--dim2)">' +
+    String(err && err.message || err) + '</span>';
+  const h = document.createElement('div');
+  h.className = 'bhint';
+  h.innerHTML =
+    'three.js r185 is loaded from the jsDelivr CDN, so the first load needs network access.<br><br>' +
+    'If you opened this file straight from disk and the browser blocked the CDN, serve the folder ' +
+    'over http instead — run this next to previz.html:<br>' +
+    '<code style="color:var(--accent2)">python -m http.server 8000</code><br>' +
+    'then open <code style="color:var(--accent2)">http://localhost:8000/previz.html</code><br>' +
+    '(or just double-click <code>serve.cmd</code>).<br><br>' +
+    'To go fully offline, save <code>three.module.js</code> and ' +
+    '<code>examples/jsm/controls/TransformControls.js</code> beside this file and repoint the importmap ' +
+    'at those local copies.';
+  document.getElementById('boot').appendChild(h);
+  throw err;
+}
+
+const DEG = Math.PI / 180, RAD = 180 / Math.PI;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const round = (v, n = 4) => { const p = 10 ** n; return Math.round(v * p) / p; };
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+
+/* ============================================================================
+   1 · CONSTANTS
+   ========================================================================== */
+
+// Real filmback sizes (mm). Focal→FOV depends on these, so a "50mm" is honest.
+const FILMBACKS = [
+  { n: 'Super 35 (3-perf)', w: 24.89, h: 18.66 },
+  { n: 'Full Frame / VV',   w: 36.00, h: 24.00 },
+  { n: 'ALEXA 35',          w: 27.99, h: 19.22 },
+  { n: 'ALEXA LF Open Gate',w: 36.70, h: 25.54 },
+  { n: 'RED KOMODO 6K S35', w: 27.03, h: 14.26 },
+  { n: 'Micro Four Thirds', w: 17.30, h: 13.00 },
+  { n: 'Super 16mm',        w: 12.52, h: 7.41 },
+];
+const ASPECTS = [
+  { n: '2.39 : 1  Scope',   v: 2.39024 },
+  { n: '1.85 : 1  Flat',    v: 1.85 },
+  { n: '16 : 9  HD',        v: 16 / 9 },
+  { n: '2.00 : 1  Univisium', v: 2.0 },
+  { n: '4 : 3  Academy',    v: 4 / 3 },
+  { n: '1 : 1  Square',     v: 1.0 },
+  { n: '9 : 16  Vertical',  v: 9 / 16 },
+];
+const LENS_PRESETS = [14, 18, 21, 24, 28, 35, 40, 50, 65, 85, 100, 135, 200];
+const FOCAL_MIN = 8, FOCAL_MAX = 300;
+// position/rot/scale channels + fov. Keys live per-channel, Maya-style.
+const TCH = ['px', 'py', 'pz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'];
+// 'fl' stores FOCAL LENGTH in mm, not fov. Keying focal keeps the animation
+// valid if the filmback or aspect is changed later; keying fov would not.
+const CH_ALL = [...TCH, 'fl'];
+const CH_GROUP = { t: ['px', 'py', 'pz'], r: ['rx', 'ry', 'rz'], s: ['sx', 'sy', 'sz'], f: ['fl'] };
+const CH_LABEL = {
+  px: 'Pos X', py: 'Pos Y', pz: 'Pos Z', rx: 'Rot X', ry: 'Rot Y', rz: 'Rot Z',
+  sx: 'Scl X', sy: 'Scl Y', sz: 'Scl Z', fl: 'Focal',
+};
+
+/* ============================================================================
+   2 · STATE
+   ========================================================================== */
+
+const S = {
+  objects: [],            // registered user objects, in outliner order
+  sel: [],                // selected objects (multi)
+  uid: 1,
+  fps: 24, start: 1, end: 120, cur: 1,
+  playing: false, loop: true, autokey: false,
+  playAcc: 0,
+  aspect: 2.39024,
+  filmback: 0,
+  lookThrough: null,      // the ACTIVE SHOT CAMERA. single layout = fullscreen
+                          // through it; split layout = the POV pane's camera.
+  layout: 'single',       // single | vsplit | hsplit
+  splitPos: 0.5,          // divider position, fraction of the viewport
+  focusPane: 0,           // pane under the cursor — nav & picking act on this one
+  gizmo: 'translate',     // translate | rotate | scale | null
+  space: 'world',
+  showGrid: true, showGate: true, showGuides: false, showPaths: false, wire: false,
+  render: { width: 1920, fps: null, burnIn: true, quality: 12, container: 'auto' },
+  dirty: true,
+};
+
+const F = () => FILMBACKS[S.filmback];
+const isCam = o => o && o.isCamera;
+const single = () => S.sel.length === 1 ? S.sel[0] : null;
+
+/* lens math — width-limited gate, the previs convention */
+const gateH = (aspect) => F().w / aspect;
+const fovFromFocal = (focal, aspect) => 2 * Math.atan(gateH(aspect) / 2 / focal) * RAD;
+const focalFromFov = (fov, aspect) => gateH(aspect) / 2 / Math.tan(fov * DEG / 2);
+// non-linear slider: focal is perceptually logarithmic
+const t2focal = t => FOCAL_MIN * Math.pow(FOCAL_MAX / FOCAL_MIN, t);
+const focal2t = f => Math.log(f / FOCAL_MIN) / Math.log(FOCAL_MAX / FOCAL_MIN);
+
+/* ============================================================================
+   3 · RENDERER / SCENE
+   ========================================================================== */
+
+const canvas = $('#glcanvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.autoClear = true;
+
+const MAXTEX = renderer.capabilities.maxTextureSize || 4096;
+const BG = new THREE.Color(0x1e1e23);      // inside the gate
+const LETTERBOX = new THREE.Color(0x0b0b0d); // outside the gate
+
+const scene = new THREE.Scene();
+const helpers = new THREE.Group();  // never exported, never picked
+helpers.name = '__helpers';
+scene.add(helpers);
+
+/* lights — neutral clay read, soft contact shadow */
+scene.add(new THREE.HemisphereLight(0xc2d6ff, 0x33333c, 0.62));
+const keyLight = new THREE.DirectionalLight(0xfff4e8, 1.55);
+keyLight.position.set(6.5, 11, 7.5);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 0.5;
+keyLight.shadow.camera.far = 90;
+const sc = 26;
+Object.assign(keyLight.shadow.camera, { left: -sc, right: sc, top: sc, bottom: -sc });
+keyLight.shadow.bias = -0.0008;
+keyLight.shadow.normalBias = 0.02;
+scene.add(keyLight);
+const fill = new THREE.DirectionalLight(0x93a8d6, 0.42);
+fill.position.set(-7, 5, -6);
+scene.add(fill);
+
+/* ground shadow catcher — invisible slab, visible contact shadow */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.ShadowMaterial({ opacity: 0.3, color: 0x000000 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.position.y = -0.001;
+scene.add(ground);   // NOT in helpers — contact shadow must survive the clean render pass
+
+/* grid */
+const grid = new THREE.GridHelper(40, 40, 0x4a4a58, 0x2c2c34);
+grid.material.transparent = true;
+grid.material.opacity = 0.85;
+helpers.add(grid);
+const axisX = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-20, 0, 0), new THREE.Vector3(20, 0, 0)]),
+  new THREE.LineBasicMaterial({ color: 0x8c4048, transparent: true, opacity: 0.85 }));
+const axisZ = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -20), new THREE.Vector3(0, 0, 20)]),
+  new THREE.LineBasicMaterial({ color: 0x3a5f96, transparent: true, opacity: 0.85 }));
+helpers.add(axisX, axisZ);
+
+/* viewport (persp) camera — never keyable, never exported */
+const persp = new THREE.PerspectiveCamera(45, 1.78, 0.05, 4000);
+persp.position.set(9, 6.5, 12);
+persp.userData.pivot = new THREE.Vector3(0, 1, 0);
+persp.lookAt(persp.userData.pivot);
+
+const selBox = new THREE.BoxHelper(undefined, 0x4f8cff);
+selBox.material.depthTest = false;
+selBox.material.transparent = true;
+selBox.visible = false;
+helpers.add(selBox);
+
+/* Pane-aware. In split layouts navigation and picking act on whichever pane
+   the cursor is over, so you can tumble the 3D view without touching the shot
+   camera — and tumble the shot camera when you mean to. */
+const activeCam = () => { const p = viewPanes(); return (p[S.focusPane] || p[0]).cam; };
+const focusPane = () => { const p = viewPanes(); return p[S.focusPane] || p[0]; };
+
+/* ============================================================================
+   4 · MAYA NAVIGATION
+   OrbitControls cannot gate on Alt or remap to Maya's tumble/track/dolly feel,
+   so this is hand-rolled. ~90 lines, and it behaves exactly like Maya.
+   ========================================================================== */
+
+const nav = (() => {
+  let mode = null, lx = 0, ly = 0, pid = -1, enabled = true;
+  const pv = () => activeCam().userData.pivot || (activeCam().userData.pivot = new THREE.Vector3());
+  const vTmp = new THREE.Vector3(), vR = new THREE.Vector3(), vU = new THREE.Vector3();
+
+  function tumble(dx, dy) {
+    const cam = activeCam(), p = pv();
+    const off = vTmp.copy(cam.position).sub(p);
+    const r = off.length(); if (r < 1e-6) return;
+    let theta = Math.atan2(off.x, off.z);
+    let phi = Math.acos(clamp(off.y / r, -1, 1));
+    theta -= dx * 0.0085;
+    phi = clamp(phi - dy * 0.0085, 1e-4, Math.PI - 1e-4);
+    cam.position.set(
+      p.x + r * Math.sin(phi) * Math.sin(theta),
+      p.y + r * Math.cos(phi),
+      p.z + r * Math.sin(phi) * Math.cos(theta));
+    cam.up.set(0, 1, 0);
+    cam.lookAt(p);
+  }
+  function track(dx, dy) {
+    const cam = activeCam(), p = pv();
+    const dist = cam.position.distanceTo(p) || 1;
+    const perPx = 2 * Math.tan(cam.fov * DEG / 2) * dist / Math.max(focusPane().h, 1);
+    cam.updateMatrixWorld();
+    vR.setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(-dx * perPx);
+    vU.setFromMatrixColumn(cam.matrixWorld, 1).multiplyScalar(dy * perPx);
+    vR.add(vU);
+    cam.position.add(vR); p.add(vR);
+  }
+  function dolly(amt) {
+    const cam = activeCam(), p = pv();
+    const dir = vTmp.copy(cam.position).sub(p);
+    const d = dir.length() || 1;
+    const nd = clamp(d * Math.exp(amt), 0.02, 20000);
+    cam.position.copy(p).add(dir.multiplyScalar(nd / d));
+  }
+
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('pointerdown', e => {
+    if (!enabled || mode) return;
+    if (!e.altKey) return;                     // Maya: nav requires Alt
+    mode = e.button === 0 ? 'tumble' : e.button === 1 ? 'track' : 'dolly';
+    lx = e.clientX; ly = e.clientY; pid = e.pointerId;
+    canvas.setPointerCapture(pid);
+    e.preventDefault(); e.stopPropagation();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!mode || e.pointerId !== pid) return;
+    const dx = e.clientX - lx, dy = e.clientY - ly;
+    lx = e.clientX; ly = e.clientY;
+    if (mode === 'tumble') tumble(dx, dy);
+    else if (mode === 'track') track(dx, dy);
+    else dolly(-(dx + dy) * 0.006);            // drag right/up = dolly in
+    onNav(); e.preventDefault();
+  });
+  const end = e => {
+    if (e.pointerId !== pid) return;
+    mode = null; pid = -1;
+    try { canvas.releasePointerCapture(e.pointerId); } catch { }
+  };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+  // middle-click autoscroll guard
+  canvas.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+  canvas.addEventListener('wheel', e => {
+    if (!enabled) return;
+    e.preventDefault();
+    dolly(clamp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016), -0.5, 0.5));
+    onNav();
+  }, { passive: false });
+
+  function onNav() {
+    S.dirty = true;
+    const cam = focusPane().cam;
+    if (cam !== persp) {                       // navigating a shot camera edits it
+      if (cam.userData.aimId) applyAim();      // an aimed camera keeps looking at its target
+      if (S.autokey) setKeys(cam, ['t', 'r'], true);
+      if (S.sel.includes(cam)) syncInspectorValues();
+    }
+  }
+
+  function frame(objs) {
+    const cam = activeCam(), p = pv();
+    const box = new THREE.Box3();
+    let any = false;
+    for (const o of (objs && objs.length ? objs : S.objects)) {
+      if (!o.visible) continue;
+      if (isCam(o) || o.userData.kind === 'null') { box.expandByPoint(o.getWorldPosition(new THREE.Vector3())); any = true; }
+      else { const b = new THREE.Box3().setFromObject(o); if (!b.isEmpty()) { box.union(b); any = true; } }
+    }
+    if (!any) { box.set(new THREE.Vector3(-4, 0, -4), new THREE.Vector3(4, 3, 4)); }
+    const c = box.getCenter(new THREE.Vector3());
+    const r = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 0.35);
+    const dist = r / Math.sin(clamp(cam.fov, 4, 170) * DEG / 2) * 1.3;
+    const dir = cam.position.clone().sub(p);
+    if (dir.lengthSq() < 1e-8) dir.set(0.6, 0.45, 1);
+    dir.normalize();
+    p.copy(c);
+    cam.position.copy(c).addScaledVector(dir, dist);
+    cam.up.set(0, 1, 0); cam.lookAt(c);
+    S.dirty = true;
+  }
+  return {
+    frame, get pivot() { return pv(); },
+    get enabled() { return enabled; }, set enabled(v) { enabled = v; },
+    get active() { return !!mode; },
+  };
+})();
+
+/* ============================================================================
+   5 · TRANSFORM GIZMO
+   r185: TransformControls extends Controls — the gizmo must be added to the
+   scene via getHelper(). Adding the controls object itself silently shows
+   nothing, which is the single most common upgrade break.
+   ========================================================================== */
+
+const tc = new TransformControls(persp, canvas);
+tc.setSize(0.82);
+tc.setSpace(S.space);
+helpers.add(tc.getHelper());
+tc.addEventListener('dragging-changed', e => {
+  nav.enabled = !e.value;
+  if (e.value) { pushUndo(); beginGizmoDrag(); }
+  else {
+    endGizmoDrag();
+    if (S.autokey) for (const o of S.sel) setKeys(o, ['t', 'r', 's'], true);
+  }
+  S.dirty = true;
+});
+tc.addEventListener('objectChange', () => { onGizmoChange(); S.dirty = true; });
+
+/* ============================================================================
+   6 · OBJECT FACTORY
+   ========================================================================== */
+
+const claySrc = new THREE.MeshStandardMaterial({ color: 0x9b9ba4, roughness: 0.74, metalness: 0.0 });
+const mkMat = (hex = 0x9b9ba4) => { const m = claySrc.clone(); m.color.setHex(hex); return m; };
+
+function geoFor(kind, p) {
+  switch (kind) {
+    case 'box': return new THREE.BoxGeometry(p.w, p.h, p.d);
+    case 'sphere': return new THREE.SphereGeometry(p.r, 28, 18);
+    case 'cylinder': return new THREE.CylinderGeometry(p.r, p.r, p.h, 28);
+    case 'cone': return new THREE.ConeGeometry(p.r, p.h, 28);
+    case 'plane': return new THREE.PlaneGeometry(p.w, p.d);
+    default: return new THREE.BoxGeometry(1, 1, 1);
+  }
+}
+const DEFP = {
+  box: { w: 1, h: 1, d: 1 }, sphere: { r: 0.5 }, cylinder: { r: 0.5, h: 1.6 },
+  cone: { r: 0.5, h: 1.4 }, plane: { w: 8, d: 8 },
+};
+
+function register(o, kind, name) {
+  o.userData.pvid = S.uid++;
+  o.userData.kind = kind;
+  o.userData.pname = name || (kind[0].toUpperCase() + kind.slice(1) + '_' + o.userData.pvid);
+  o.userData.tracks = o.userData.tracks || {};
+  S.objects.push(o);
+  scene.add(o);
+  return o;
+}
+
+function addPrimitive(kind, opts = {}) {
+  const p = { ...(DEFP[kind] || {}), ...(opts.params || {}) };
+  let o;
+  if (kind === 'figure') {
+    o = new THREE.Group();
+    const m = mkMat(opts.color ?? 0x6f8fb8);
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 1.02, 6, 14), m);
+    body.position.y = 0.78;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 12), m);
+    head.position.y = 1.63;
+    const legs = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.5, 4, 12), m);
+    legs.position.y = 0.32;
+    for (const c of [body, head, legs]) { c.castShadow = true; c.receiveShadow = true; }
+    o.add(legs, body, head);
+    o.userData.mat = m;
+  } else {
+    const m = mkMat(opts.color ?? (kind === 'plane' ? 0x74747c : 0x9b9ba4));
+    o = new THREE.Mesh(geoFor(kind, p), m);
+    o.castShadow = kind !== 'plane';
+    o.receiveShadow = true;
+    if (kind === 'plane') o.rotation.x = -Math.PI / 2;
+    else if (kind !== 'sphere') o.position.y = (p.h ?? 1) / 2;
+    else o.position.y = p.r;
+    o.userData.mat = m;
+  }
+  o.userData.params = p;
+  register(o, kind, opts.name);
+  return o;
+}
+
+/* --- shot cameras --------------------------------------------------------- */
+function camBodyMesh() {
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: 0x2f3238, roughness: 0.55, metalness: 0.35 });
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.42), m);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.2, 16), m);
+  lens.rotation.x = Math.PI / 2; lens.position.z = -0.29;
+  const mag = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 18), m);
+  mag.rotation.z = Math.PI / 2; mag.position.set(0, 0.17, 0.05);
+  g.add(b, lens, mag);
+  g.userData.isCamBody = true;
+  return g;
+}
+
+/* A compact frustum drawn to a fixed display depth, parented to the camera.
+   CameraHelper draws all the way to the far plane, which at far=2000 completely
+   swamps a blockout scene; parenting also makes the transform free. */
+const FRUSTUM_DEPTH = 2.4;
+function makeFrustum() {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(11 * 2 * 3), 3));
+  const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+    color: 0x6b7d99, transparent: true, opacity: 0.8,
+  }));
+  l.frustumCulled = false;
+  return l;
+}
+function updateFrustum(cam) {
+  const l = cam.userData.frustum; if (!l) return;
+  const d = FRUSTUM_DEPTH;
+  const vf = fovFromFocal(cam.userData.focal, S.aspect) * DEG;
+  const hh = Math.tan(vf / 2) * d, hw = hh * S.aspect;
+  const c = [[-hw, hh, -d], [hw, hh, -d], [hw, -hh, -d], [-hw, -hh, -d]];
+  const seg = [];
+  for (const p of c) seg.push([0, 0, 0], p);                 // rays from the lens
+  for (let i = 0; i < 4; i++) seg.push(c[i], c[(i + 1) % 4]); // the gate rectangle
+  const ty = hh * 1.5;                                       // up-triangle: roll is readable
+  seg.push([-hw * .45, hh * 1.1, -d], [hw * .45, hh * 1.1, -d]);
+  seg.push([-hw * .45, hh * 1.1, -d], [0, ty, -d]);
+  seg.push([hw * .45, hh * 1.1, -d], [0, ty, -d]);
+  const a = l.geometry.attributes.position;
+  for (let i = 0; i < seg.length; i++) a.setXYZ(i, seg[i][0], seg[i][1], seg[i][2]);
+  a.needsUpdate = true;
+  l.geometry.setDrawRange(0, seg.length);
+}
+
+function addCamera(opts = {}) {
+  const focal = opts.focal ?? 35;
+  const cam = new THREE.PerspectiveCamera(fovFromFocal(focal, S.aspect), S.aspect, opts.near ?? 0.1, opts.far ?? 2000);
+  cam.userData.focal = focal;
+  cam.userData.pivot = new THREE.Vector3(0, 1, 0);
+  cam.userData.aimId = opts.aimId ?? null;
+  cam.position.set(opts.pos?.[0] ?? 6, opts.pos?.[1] ?? 2.2, opts.pos?.[2] ?? 8);
+  // one child group holds the body + frustum, so hiding it is a single flag
+  const gizmo = new THREE.Group();
+  const fr = makeFrustum();
+  gizmo.add(camBodyMesh(), fr);
+  cam.add(gizmo);
+  cam.userData.gizmo = gizmo;
+  cam.userData.frustum = fr;
+  register(cam, 'camera', opts.name);
+  if (!opts.pos) cam.lookAt(0, 1.2, 0);
+  updateFrustum(cam);
+  return cam;
+}
+const setCamColor = (cam, hex) => cam.userData.frustum?.material.color.setHex(hex);
+
+function addNull(opts = {}) {
+  const g = new THREE.Group();
+  const m = new THREE.MeshBasicMaterial({ color: 0xf0a92b });
+  const s = 0.16;
+  for (const [ax, r] of [['x', [0, 0, Math.PI / 2]], ['y', [0, 0, 0]], ['z', [Math.PI / 2, 0, 0]]]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.022, s * 2, 0.022), m);
+    bar.rotation.set(r[0], r[1], r[2]);
+    g.add(bar);
+  }
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(s * 2, s * 2, s * 2),
+    new THREE.MeshBasicMaterial({ visible: false }));
+  g.add(hit);
+  g.position.set(opts.pos?.[0] ?? 0, opts.pos?.[1] ?? 1.2, opts.pos?.[2] ?? 0);
+  g.userData.mat = m;
+  register(g, 'null', opts.name);
+  return g;
+}
+
+function removeObject(o) {
+  const i = S.objects.indexOf(o);
+  if (i < 0) return;
+  S.objects.splice(i, 1);
+  // anything aiming at this null loses its aim
+  for (const c of S.objects) if (isCam(c) && c.userData.aimId === o.userData.pvid) c.userData.aimId = null;
+  if (S.lookThrough === o) setLookThrough(null);
+  if (o.userData.pathLine) { helpers.remove(o.userData.pathLine); disposeDeep(o.userData.pathLine); }
+  scene.remove(o);
+  disposeDeep(o);
+  S.sel = S.sel.filter(x => x !== o);
+  S.dirty = true;
+}
+function disposeDeep(root) {
+  root.traverse?.(n => {
+    n.geometry?.dispose?.();
+    if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => m.dispose?.());
+  });
+}
+
+function duplicateSel() {
+  if (!S.sel.length) return;
+  pushUndo();
+  const made = [];
+  for (const o of S.sel) {
+    const d = serializeObject(o);
+    d.name = uniqueName(d.name);
+    delete d.id;
+    const n = deserializeObject(d);
+    if (n) { n.position.x += 1.2; made.push(n); }
+  }
+  if (made.length) { select(made); rebuildOutliner(); syncInspector(); toast('Duplicated ' + made.length); }
+}
+function uniqueName(base) {
+  const stem = base.replace(/_\d+$/, '');
+  const used = new Set(S.objects.map(o => o.userData.pname));
+  let i = 1, n = stem + '_' + i;
+  while (used.has(n)) n = stem + '_' + (++i);
+  return n;
+}
+
+/* ============================================================================
+   7 · SELECTION
+   ========================================================================== */
+
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let downX = 0, downY = 0, downBtn = -1, downOnGizmo = false, dividerDrag = false;
+
+/* exclude only the camera this pane is looking through — the shot camera stays
+   pickable in the 3D pane, which is the whole point of the split view */
+function pickables(fromCam) {
+  return S.objects.filter(o => o.visible && o !== fromCam);
+}
+function resolvePick(hit) {
+  let n = hit;
+  while (n && n.userData.pvid == null) n = n.parent;
+  return n && S.objects.includes(n) ? n : null;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  downX = e.clientX; downY = e.clientY; downBtn = e.button;
+  downOnGizmo = tc.axis != null && tc.object != null;
+});
+canvas.addEventListener('pointerup', e => {
+  if (e.button !== 0 || downBtn !== 0) return;
+  if (e.altKey || nav.active || downOnGizmo || dividerDrag) return;
+  if (Math.abs(e.clientX - downX) > 4 || Math.abs(e.clientY - downY) > 4) return;
+  const r = canvas.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  const p = paneAt(px, py); if (!p) return;
+  // map through the pane's gate so picking lines up with what you actually see
+  const g = paneImageRect(p);
+  ndc.x = ((px - g.x) / g.w) * 2 - 1;
+  ndc.y = -((py - g.y) / g.h) * 2 + 1;
+  if (Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) { if (!e.shiftKey) select([]); return; }
+  ray.setFromCamera(ndc, p.cam);
+  const hits = ray.intersectObjects(pickables(p.cam), true);
+  let found = null;
+  for (const h of hits) { const o = resolvePick(h.object); if (o) { found = o; break; } }
+  if (found) {
+    if (e.shiftKey) select(S.sel.includes(found) ? S.sel.filter(x => x !== found) : [...S.sel, found]);
+    else select([found]);
+  } else if (!e.shiftKey) select([]);
+});
+
+function select(list) {
+  S.sel = (Array.isArray(list) ? list : [list]).filter(Boolean);
+  const o = single();
+  attachGizmo();
+  if (o) { selBox.setFromObject(o); selBox.visible = !isCam(o) && o.userData.kind !== 'null'; }
+  else selBox.visible = false;
+  for (const c of S.objects) if (isCam(c))
+    setCamColor(c, S.sel.includes(c) ? 0x4f8cff : 0x6b7d99);
+  rebuildOutliner(); syncInspector(); refreshAllPaths(); drawTimeline();
+  S.dirty = true;
+}
+function setGizmo(m) {
+  S.gizmo = m;
+  attachGizmo();
+  for (const b of document.querySelectorAll('[data-giz]'))
+    b.classList.toggle('on', b.dataset.giz === (m || 'pick'));
+  S.dirty = true;
+}
+
+/* Sets the ACTIVE SHOT CAMERA. Per-pane self-hiding happens at render time, so
+   a camera stays visible in the 3D pane while you look through it in the other. */
+function setLookThrough(cam) {
+  S.lookThrough = cam;
+  if (S.layout === 'single') S.focusPane = 0;
+  attachGizmo();
+  rebuildOutliner(); syncInspector();
+  S.dirty = true;
+}
+
+
+/* ============================================================================
+   8 · ANIMATION
+   The whole app hangs off evaluateFrame(f) being a PURE function of the frame
+   index — no deltaTime accumulation anywhere in the animation path. That is
+   what makes the export frame-exact instead of "whatever the GPU managed".
+   ========================================================================== */
+
+const byId = id => S.objects.find(o => o.userData.pvid === id) || null;
+
+function getChan(o, ch) {
+  switch (ch) {
+    case 'px': return o.position.x; case 'py': return o.position.y; case 'pz': return o.position.z;
+    case 'rx': return o.rotation.x * RAD; case 'ry': return o.rotation.y * RAD; case 'rz': return o.rotation.z * RAD;
+    case 'sx': return o.scale.x; case 'sy': return o.scale.y; case 'sz': return o.scale.z;
+    case 'fl': return o.userData.focal ?? 35;
+  }
+  return 0;
+}
+function setChan(o, ch, v) {
+  switch (ch) {
+    case 'px': o.position.x = v; break; case 'py': o.position.y = v; break; case 'pz': o.position.z = v; break;
+    case 'rx': o.rotation.x = v * DEG; break; case 'ry': o.rotation.y = v * DEG; break; case 'rz': o.rotation.z = v * DEG; break;
+    case 'sx': o.scale.x = v || 1e-4; break; case 'sy': o.scale.y = v || 1e-4; break; case 'sz': o.scale.z = v || 1e-4; break;
+    case 'fl':
+      o.userData.focal = clamp(v, FOCAL_MIN, FOCAL_MAX);
+      if (o.isPerspectiveCamera) { o.fov = fovFromFocal(o.userData.focal, S.aspect); o.updateProjectionMatrix(); }
+      break;
+  }
+}
+
+/* Hermite with Catmull-Rom finite-difference tangents, zero tangents at the
+   ends. Zero end-tangents *are* the ease-in/ease-out the brief asked for —
+   no separate easing system needed, and multi-key moves stay C1 continuous
+   instead of stopping dead at every key. */
+function evalTrack(tr, f) {
+  const n = tr.length;
+  if (!n) return null;
+  if (n === 1 || f <= tr[0].f) return tr[0].v;
+  if (f >= tr[n - 1].f) return tr[n - 1].v;
+  let i = 0; while (i < n - 2 && tr[i + 1].f <= f) i++;
+  const k0 = tr[i], k1 = tr[i + 1];
+  if (k0.i === 'step') return k0.v;
+  const dt = k1.f - k0.f;
+  const t = dt > 0 ? (f - k0.f) / dt : 0;
+  if (k0.i === 'linear' || k1.i === 'linear') return lerp(k0.v, k1.v, t);
+  const pm = tr[i - 1], pp = tr[i + 2];
+  const m0 = pm ? (k1.v - pm.v) / (k1.f - pm.f) * dt : 0;
+  const m1 = pp ? (pp.v - k0.v) / (pp.f - k0.f) * dt : 0;
+  const t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * k0.v + (t3 - 2 * t2 + t) * m0 +
+         (-2 * t3 + 3 * t2) * k1.v + (t3 - t2) * m1;
+}
+/* read a channel at frame f WITHOUT touching the object (used by path drawing) */
+function sampleChan(o, ch, f) {
+  const tr = o.userData.tracks?.[ch];
+  if (tr && tr.length) { const v = evalTrack(tr, f); if (v != null) return v; }
+  return getChan(o, ch);
+}
+
+/* Aim constraints must resolve after every transform change, not only on a
+   frame change — otherwise dragging an aimed camera leaves its rotation stale
+   until the next scrub. */
+const _aimV = new THREE.Vector3();
+function applyAim() {
+  for (const o of S.objects) {
+    if (!isCam(o) || !o.userData.aimId) continue;
+    const t = byId(o.userData.aimId); if (!t) continue;
+    t.updateMatrixWorld();
+    o.up.set(0, 1, 0);
+    o.lookAt(t.getWorldPosition(_aimV));
+  }
+}
+
+function evaluateFrame(f) {
+  for (const o of S.objects) {
+    const T = o.userData.tracks; if (!T) continue;
+    for (const ch of CH_ALL) {
+      const tr = T[ch]; if (!tr || !tr.length) continue;
+      const v = evalTrack(tr, f);
+      if (v != null) setChan(o, ch, v);
+    }
+  }
+  applyAim();
+}
+
+function keyableChans(o, groups) {
+  const out = [];
+  for (const g of groups) for (const c of (CH_GROUP[g] || [])) {
+    if (c === 'fl' && !isCam(o)) continue;
+    if (c[0] === 'r' && isCam(o) && o.userData.aimId) continue;   // aimed cams don't key rotation
+    if (c[0] === 's' && (isCam(o) || o.userData.kind === 'null')) continue;
+    out.push(c);
+  }
+  return out;
+}
+
+function putKey(o, ch) {
+  const T = o.userData.tracks;
+  const tr = T[ch] || (T[ch] = []);
+  let v = getChan(o, ch);
+  if (ch[0] === 'r') {                         // unwrap so 179°→-179° doesn't spin backwards
+    let ref = null;
+    for (const k of tr) if (k.f < S.cur) ref = k.v;
+    if (ref == null && tr.length) ref = tr[0].v;
+    if (ref != null) { while (v - ref > 180) v -= 360; while (v - ref < -180) v += 360; }
+  }
+  const i = tr.findIndex(k => k.f === S.cur);
+  if (i >= 0) tr[i].v = v;
+  else { tr.push({ f: S.cur, v, i: 'spline' }); tr.sort((a, b) => a.f - b.f); }
+}
+function setKeysCh(o, chs, silent) {
+  if (!o || !chs.length) return 0;
+  for (const ch of chs) putKey(o, ch);
+  if (!silent) toast('Key ' + o.userData.pname + ' @ ' + S.cur);
+  refreshPath(o); drawTimeline(); syncInspectorValues();
+  return chs.length;
+}
+const setKeys = (o, groups, silent) => o ? setKeysCh(o, keyableChans(o, groups), silent) : 0;
+/* click a ◆ badge to add the key, click again to remove it */
+function toggleKeyChannel(o, ch) {
+  const tr = o.userData.tracks[ch];
+  if (tr && tr.some(k => k.f === S.cur)) {
+    const i = tr.findIndex(k => k.f === S.cur);
+    tr.splice(i, 1);
+    if (!tr.length) delete o.userData.tracks[ch];
+    refreshPath(o); drawTimeline(); syncInspectorValues(); S.dirty = true;
+  } else setKeysCh(o, [ch], true);
+}
+function deleteKeys(o, groups) {
+  if (!o) return 0;
+  let n = 0;
+  for (const ch of (groups ? keyableChans(o, groups) : CH_ALL)) {
+    const tr = o.userData.tracks[ch]; if (!tr) continue;
+    const i = tr.findIndex(k => k.f === S.cur);
+    if (i >= 0) { tr.splice(i, 1); n++; }
+    if (!tr.length) delete o.userData.tracks[ch];
+  }
+  if (n) { toast('Removed ' + n + ' key' + (n > 1 ? 's' : '') + ' @ ' + S.cur); refreshPath(o); drawTimeline(); syncInspectorValues(); S.dirty = true; }
+  return n;
+}
+function clearAllKeys(o) {
+  if (!o) return;
+  o.userData.tracks = {};
+  refreshPath(o); drawTimeline(); syncInspector(); S.dirty = true;
+  toast('Cleared all keys on ' + o.userData.pname);
+}
+function keyFramesOf(o) {
+  const s = new Set();
+  if (o?.userData.tracks) for (const ch of CH_ALL)
+    for (const k of (o.userData.tracks[ch] || [])) s.add(k.f);
+  return [...s].sort((a, b) => a - b);
+}
+function allKeyFrames() {
+  const s = new Set();
+  for (const o of S.objects) for (const f of keyFramesOf(o)) s.add(f);
+  return [...s].sort((a, b) => a - b);
+}
+function hasAnim() { return S.objects.some(o => keyFramesOf(o).length > 0); }
+function gotoKey(dir) {
+  const ks = (single() ? keyFramesOf(single()) : allKeyFrames());
+  if (!ks.length) return;
+  const next = dir > 0 ? ks.find(f => f > S.cur) : [...ks].reverse().find(f => f < S.cur);
+  if (next != null) setFrame(next);
+}
+
+/* ============================================================================
+   9 · MOTION PATHS — derived from the actual keys, so they can never desync
+   ========================================================================== */
+
+function refreshPath(o) {
+  if (!o) return;
+  if (o.userData.pathLine) { helpers.remove(o.userData.pathLine); disposeDeep(o.userData.pathLine); o.userData.pathLine = null; }
+  if (!S.showPaths) return;
+  const moving = ['px', 'py', 'pz'].some(c => (o.userData.tracks?.[c] || []).length > 1);
+  if (!moving) return;
+  const ks = keyFramesOf(o);
+  const f0 = Math.min(ks[0], S.start), f1 = Math.max(ks[ks.length - 1], S.start + 1);
+  const steps = clamp(Math.round((f1 - f0) * 2), 8, 600);
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const f = f0 + (f1 - f0) * i / steps;
+    pts.push(new THREE.Vector3(sampleChan(o, 'px', f), sampleChan(o, 'py', f), sampleChan(o, 'pz', f)));
+  }
+  const isSel = S.sel.includes(o);
+  const g = new THREE.Group();
+  g.add(new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: isSel ? 0x4f8cff : 0x4a5568, transparent: true, opacity: isSel ? 0.95 : 0.5 })));
+  const kp = ks.map(f => new THREE.Vector3(sampleChan(o, 'px', f), sampleChan(o, 'py', f), sampleChan(o, 'pz', f)));
+  if (kp.length) g.add(new THREE.Points(
+    new THREE.BufferGeometry().setFromPoints(kp),
+    new THREE.PointsMaterial({ color: 0xf0a92b, size: 7, sizeAttenuation: false, transparent: true, opacity: isSel ? 1 : 0.6 })));
+  o.userData.pathLine = g;
+  helpers.add(g);
+  S.dirty = true;
+}
+const refreshAllPaths = () => S.objects.forEach(refreshPath);
+
+/* ============================================================================
+   10 · VIEWPORT SIZING / GATE
+   ========================================================================== */
+
+const overlay = $('#overlay');
+const octx = overlay.getContext('2d');
+let VW = 1, VH = 1;
+
+/* gate is centred, so the rect is identical whether y counts from top or bottom */
+function gateRect(w, h, a) {
+  let gw = w, gh = w / a;
+  if (gh > h) { gh = h; gw = h * a; }
+  return { x: Math.round((w - gw) / 2), y: Math.round((h - gh) / 2), w: Math.round(gw), h: Math.round(gh) };
+}
+
+const SPLIT_MIN = 0.18, SPLIT_MAX = 0.82;
+const splitAt = () => clamp(S.splitPos, SPLIT_MIN, SPLIT_MAX);
+
+/* Pane rects are CSS px with y from the TOP.
+   Pane 0 is always the free-nav 3D view; pane 1 is always the shot-camera POV. */
+function viewPanes() {
+  const shot = S.lookThrough || S.objects.find(isCam) || null;
+  if (S.layout === 'single') {
+    const cam = S.lookThrough || persp;
+    return [{ i: 0, x: 0, y: 0, w: VW, h: VH, cam, pov: !!S.lookThrough,
+              label: S.lookThrough ? S.lookThrough.userData.pname : 'persp' }];
+  }
+  const D = 1;
+  let a, b;
+  if (S.layout === 'vsplit') {
+    const w0 = Math.round(VW * splitAt());
+    a = { x: 0, y: 0, w: Math.max(1, w0 - D), h: VH };
+    b = { x: w0 + D, y: 0, w: Math.max(1, VW - w0 - D), h: VH };
+  } else {
+    const h0 = Math.round(VH * splitAt());
+    a = { x: 0, y: 0, w: VW, h: Math.max(1, h0 - D) };
+    b = { x: 0, y: h0 + D, w: VW, h: Math.max(1, VH - h0 - D) };
+  }
+  return [
+    { i: 0, ...a, cam: persp, pov: false, label: 'persp' },
+    { i: 1, ...b, cam: shot || persp, pov: !!shot, label: shot ? shot.userData.pname : 'no camera' },
+  ];
+}
+function paneAt(x, y) {
+  const ps = viewPanes();
+  for (const p of ps) if (x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h) return p;
+  return ps[S.focusPane] || ps[0];
+}
+/* the actual rendered image inside a pane — gate-inset for POV panes */
+function paneImageRect(p) {
+  if (!(p.pov && S.showGate)) return { x: p.x, y: p.y, w: p.w, h: p.h };
+  const g = gateRect(p.w, p.h, S.aspect);
+  return { x: p.x + g.x, y: p.y + g.y, w: g.w, h: g.h };
+}
+function dividerHit(x, y) {
+  if (S.layout === 'single') return false;
+  return S.layout === 'vsplit'
+    ? Math.abs(x - VW * splitAt()) <= 5
+    : Math.abs(y - VH * splitAt()) <= 5;
+}
+
+/* TransformControls exposes a `viewport` Vector4 (WebGL convention) that its
+   pointer→NDC mapping honours. Pointing it at the focused pane is what makes
+   gizmo dragging correct inside a split view — no internals patched. */
+function syncGizmoViewport() {
+  const p = focusPane(), g = paneImageRect(p);
+  tc.camera = p.cam;
+  if (!tc.viewport) tc.viewport = new THREE.Vector4();
+  tc.viewport.set(g.x, VH - (g.y + g.h), g.w, g.h);
+}
+
+function setLayout(mode) {
+  S.layout = mode;
+  if (mode !== 'single' && !S.lookThrough) S.lookThrough = S.objects.find(isCam) || null;
+  if (mode === 'single') S.focusPane = 0;
+  for (const b of document.querySelectorAll('[data-lay]'))
+    b.classList.toggle('on', b.dataset.lay === mode);
+  attachGizmo(); rebuildOutliner(); syncInspector();
+  S.dirty = true;
+}
+
+/* pane focus follows the cursor; divider is draggable */
+canvas.addEventListener('pointermove', e => {
+  if (dividerDrag || nav.active || tc.dragging) return;
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  canvas.style.cursor = dividerHit(x, y) ? (S.layout === 'vsplit' ? 'col-resize' : 'row-resize') : '';
+  const p = paneAt(x, y);
+  if (p.i !== S.focusPane) { S.focusPane = p.i; attachGizmo(); S.dirty = true; }
+});
+canvas.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.altKey) return;
+  const r = canvas.getBoundingClientRect();
+  if (!dividerHit(e.clientX - r.left, e.clientY - r.top)) return;
+  dividerDrag = true;
+  canvas.setPointerCapture(e.pointerId);
+  const mv = ev => {
+    const rr = canvas.getBoundingClientRect();
+    S.splitPos = clamp(S.layout === 'vsplit'
+      ? (ev.clientX - rr.left) / Math.max(VW, 1)
+      : (ev.clientY - rr.top) / Math.max(VH, 1), SPLIT_MIN, SPLIT_MAX);
+    syncGizmoViewport(); S.dirty = true;
+  };
+  const up = ev => {
+    dividerDrag = false;
+    canvas.removeEventListener('pointermove', mv);
+    canvas.removeEventListener('pointerup', up);
+    try { canvas.releasePointerCapture(ev.pointerId); } catch { }
+  };
+  canvas.addEventListener('pointermove', mv);
+  canvas.addEventListener('pointerup', up);
+  e.stopPropagation();
+}, true);   // capture: must beat the selection handler
+
+function resize() {
+  const r = $('#viewWrap').getBoundingClientRect();
+  VW = Math.max(1, Math.floor(r.width)); VH = Math.max(1, Math.floor(r.height));
+  renderer.setSize(VW, VH, false);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  overlay.width = Math.floor(VW * dpr); overlay.height = Math.floor(VH * dpr);
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  syncGizmoViewport();
+  resizeTimeline();
+  S.dirty = true;
+}
+addEventListener('resize', resize);
+
+/* ---- overlay: framing guides + pane chrome (2D, non-intrusive) ---- */
+function drawGuides(g) {
+  const line = (x1, y1, x2, y2, c, d) => {
+    octx.strokeStyle = c; octx.lineWidth = 1; octx.setLineDash(d || []);
+    octx.beginPath(); octx.moveTo(x1 + .5, y1 + .5); octx.lineTo(x2 + .5, y2 + .5); octx.stroke();
+    octx.setLineDash([]);
+  };
+  for (let i = 1; i < 3; i++) {   // thirds
+    line(g.x + g.w * i / 3, g.y, g.x + g.w * i / 3, g.y + g.h, 'rgba(255,255,255,.11)');
+    line(g.x, g.y + g.h * i / 3, g.x + g.w, g.y + g.h * i / 3, 'rgba(255,255,255,.11)');
+  }
+  for (const [p, c] of [[0.9, 'rgba(255,255,255,.22)'], [0.8, 'rgba(255,255,255,.14)']]) {
+    const w = g.w * p, h = g.h * p;    // safe action / safe title
+    octx.strokeStyle = c; octx.lineWidth = 1; octx.setLineDash([4, 4]);
+    octx.strokeRect(Math.round(g.x + (g.w - w) / 2) + .5, Math.round(g.y + (g.h - h) / 2) + .5, Math.round(w), Math.round(h));
+    octx.setLineDash([]);
+  }
+  const cx = g.x + g.w / 2, cy = g.y + g.h / 2;
+  line(cx - 9, cy, cx + 9, cy, 'rgba(255,255,255,.4)');
+  line(cx, cy - 9, cx, cy + 9, 'rgba(255,255,255,.4)');
+}
+
+function drawOverlay() {
+  octx.clearRect(0, 0, VW, VH);
+  const ps = viewPanes();
+  const multi = ps.length > 1;
+  for (const p of ps) {
+    const g = paneImageRect(p);
+    if (p.pov && S.showGate) {
+      octx.strokeStyle = 'rgba(255,255,255,.18)'; octx.lineWidth = 1;
+      octx.strokeRect(g.x + .5, g.y + .5, g.w - 1, g.h - 1);
+    }
+    if (p.pov && S.showGuides) drawGuides(g);
+    if (multi) {                      // per-pane label
+      const focused = p.i === S.focusPane;
+      const txt = p.pov
+        ? p.label + (p.cam.userData.focal ? '  ' + Math.round(p.cam.userData.focal) + 'mm' : '')
+        : 'persp';
+      // bottom-RIGHT of the pane: bottom-left is where the nav-help sits
+      octx.font = '600 10px ui-monospace,monospace';
+      const w = octx.measureText(txt).width + 12;
+      const bx = p.x + p.w - w - 7;
+      octx.fillStyle = focused ? 'rgba(79,140,255,.85)' : 'rgba(14,14,17,.75)';
+      octx.beginPath(); octx.roundRect(bx, p.y + p.h - 22, w, 15, 3); octx.fill();
+      octx.fillStyle = focused ? '#fff' : '#8b8b96';
+      octx.textBaseline = 'middle'; octx.textAlign = 'left';
+      octx.fillText(txt, bx + 6, p.y + p.h - 14);
+    }
+  }
+  if (multi) {
+    octx.fillStyle = '#33333b';
+    if (S.layout === 'vsplit') { const x = Math.round(VW * splitAt()); octx.fillRect(x - 1, 0, 2, VH); }
+    else { const y = Math.round(VH * splitAt()); octx.fillRect(0, y - 1, VW, 2); }
+    const p = ps[S.focusPane] || ps[0];
+    octx.strokeStyle = 'rgba(79,140,255,.5)'; octx.lineWidth = 1.5;
+    octx.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2);
+  }
+}
+
+/* ============================================================================
+   11 · RENDER
+   ========================================================================== */
+
+function renderPane(p) {
+  const cam = p.cam;
+  const glY = VH - (p.y + p.h);
+  renderer.setScissorTest(true);
+  renderer.setViewport(p.x, glY, p.w, p.h);
+  renderer.setScissor(p.x, glY, p.w, p.h);
+  renderer.setClearColor(p.pov && S.showGate ? LETTERBOX : BG, 1);
+  renderer.clear();
+
+  const g = paneImageRect(p);
+  cam.aspect = (p.pov && S.showGate) ? S.aspect : Math.max(g.w, 1) / Math.max(g.h, 1);
+  if (cam.userData.focal) cam.fov = fovFromFocal(cam.userData.focal, cam.aspect);
+  cam.updateProjectionMatrix();
+
+  renderer.setViewport(g.x, VH - (g.y + g.h), g.w, g.h);
+  renderer.setScissor(g.x, VH - (g.y + g.h), g.w, g.h);
+  renderer.setClearColor(BG, 1);
+
+  // a camera must not see its own body or frustum, but stays visible elsewhere
+  const own = cam !== persp ? cam.userData.gizmo : null;
+  const wasVisible = own?.visible;
+  if (own) own.visible = false;
+  renderer.render(scene, cam);
+  if (own) own.visible = wasVisible;
+}
+
+function renderViewport() {
+  grid.visible = axisX.visible = axisZ.visible = S.showGrid;
+  for (const o of S.objects) if (isCam(o)) updateFrustum(o);
+  if (single()) selBox.setFromObject(single());
+
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, VW, VH);
+  renderer.setClearColor(0x0a0a0c, 1);      // divider / gutter
+  renderer.clear();
+  for (const p of viewPanes()) renderPane(p);
+  renderer.setScissorTest(false);
+  drawOverlay();
+}
+
+let lastT = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min((now - lastT) / 1000, 0.25); lastT = now;
+  if (exporting) return;                       // export drives its own loop
+  if (S.playing) {
+    S.playAcc += dt * S.fps;
+    if (S.playAcc >= 1) {
+      const adv = Math.floor(S.playAcc); S.playAcc -= adv;
+      let f = S.cur + adv;
+      const span = Math.max(1, S.end - S.start + 1);
+      if (f > S.end) {
+        if (S.loop) f = S.start + ((f - S.start) % span);
+        else { f = S.end; setPlaying(false); }
+      }
+      setFrame(f);
+    }
+  }
+  if (S.dirty || S.playing) { renderViewport(); updateHud(); S.dirty = false; }
+}
+
+function setFrame(f) {
+  S.cur = clamp(Math.round(f), S.start, S.end);
+  evaluateFrame(S.cur);
+  $('#curFrame').value = S.cur;
+  syncInspectorValues(); drawTimeline();
+  S.dirty = true;
+}
+function setPlaying(p) {
+  S.playing = p; S.playAcc = 0;
+  $('#btnPlay').textContent = p ? '❚❚' : '▶';
+  $('#btnPlay').classList.toggle('on', !p);
+}
+function updateHud() {
+  const p = focusPane(), cam = p.cam;
+  const a = ASPECTS.find(x => Math.abs(x.v - S.aspect) < 1e-3);
+  const an = a ? a.n.split(' ')[0] : S.aspect.toFixed(2);
+  $('#hudCam').innerHTML = p.pov
+    ? '🎥 <b>' + p.label + '</b>'
+    : 'persp <span style="color:var(--dim2)">free nav</span>';
+  $('#hudLens').innerHTML = p.pov
+    ? '<b>' + Math.round(cam.userData.focal) + 'mm</b> · ' + F().w.toFixed(1) + 'mm gate · ' + an
+    : '<span style="color:var(--dim2)">target ' + an + '</span>';
+  $('#hudFrame').innerHTML = 'f <b>' + S.cur + '</b> <span style="color:var(--dim2)">/ ' + S.end + '</span>' +
+    (keyFramesOf(single()).includes(S.cur) ? ' <span class="k">◆</span>' : '');
+}
+
+/* ============================================================================
+   12 · TIMELINE
+   ========================================================================== */
+
+const tlc = $('#tlCanvas'), tctx = tlc.getContext('2d');
+let TW = 1, TH = 1;
+function resizeTimeline() {
+  const r = tlc.getBoundingClientRect();
+  TW = Math.max(1, Math.floor(r.width)); TH = Math.max(1, Math.floor(r.height));
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  tlc.width = Math.floor(TW * dpr); tlc.height = Math.floor(TH * dpr);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawTimeline();
+}
+const PADL = 6, PADR = 6;
+const f2x = f => PADL + (f - S.start) / Math.max(1, S.end - S.start) * (TW - PADL - PADR);
+const x2f = x => S.start + (x - PADL) / Math.max(1, TW - PADL - PADR) * (S.end - S.start);
+
+function drawTimeline() {
+  if (!TW) return;
+  const c = tctx;
+  c.clearRect(0, 0, TW, TH);
+  const rulerH = 17, trackY = rulerH + 4, trackH = TH - rulerH - 12;
+
+  c.fillStyle = '#191a1e';
+  c.beginPath(); c.roundRect(0, 0, TW, TH, 4); c.fill();
+
+  // ruler ticks — pick a step that keeps labels ~52px apart
+  const span = Math.max(1, S.end - S.start);
+  const pxPerF = (TW - PADL - PADR) / span;
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
+  const step = steps.find(s => s * pxPerF >= 52) || 2000;
+  c.font = '9.5px ui-monospace,monospace';
+  c.textBaseline = 'middle';
+  const first = Math.ceil(S.start / step) * step;
+  for (let f = first; f <= S.end; f += step) {
+    const x = f2x(f);
+    c.fillStyle = '#3d3d46'; c.fillRect(Math.round(x), 4, 1, 7);
+    c.fillStyle = '#6a6a74'; c.textAlign = 'center';
+    c.fillText(String(f), x, rulerH - 3);
+  }
+  // sub ticks
+  if (pxPerF > 5) {
+    const sub = step / (step % 5 === 0 ? 5 : 2);
+    for (let f = Math.ceil(S.start / sub) * sub; f <= S.end; f += sub) {
+      if (f % step === 0) continue;
+      c.fillStyle = '#2c2c34'; c.fillRect(Math.round(f2x(f)), 5, 1, 4);
+    }
+  }
+  // track lane
+  c.fillStyle = '#141418';
+  c.beginPath(); c.roundRect(PADL - 2, trackY, TW - PADL - PADR + 4, trackH, 3); c.fill();
+
+  // other objects' keys — faint, so you can see the whole shot's rhythm
+  const sel = single();
+  c.fillStyle = 'rgba(240,169,43,.22)';
+  for (const o of S.objects) {
+    if (o === sel) continue;
+    for (const f of keyFramesOf(o)) {
+      if (f < S.start || f > S.end) continue;
+      c.fillRect(Math.round(f2x(f)), trackY + trackH - 5, 1.6, 4);
+    }
+  }
+  // selected object's keys — amber diamonds
+  if (sel) {
+    const ks = keyFramesOf(sel), cy = trackY + trackH / 2;
+    for (const f of ks) {
+      if (f < S.start || f > S.end) continue;
+      const x = f2x(f);
+      c.save(); c.translate(x, cy); c.rotate(Math.PI / 4);
+      c.fillStyle = f === S.cur ? '#ffdca0' : '#f0a92b';
+      c.fillRect(-4, -4, 8, 8);
+      c.restore();
+    }
+    if (ks.length > 1) {
+      c.strokeStyle = 'rgba(240,169,43,.35)'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(f2x(ks[0]), cy); c.lineTo(f2x(ks[ks.length - 1]), cy); c.stroke();
+    }
+  } else {
+    c.fillStyle = '#4b4b55'; c.font = '10.5px var(--font),sans-serif'; c.textAlign = 'left';
+    c.fillText('select an object to see its keys', PADL + 6, trackY + trackH / 2);
+  }
+  // playhead
+  const px = Math.round(f2x(S.cur));
+  c.fillStyle = '#4f8cff'; c.fillRect(px, 2, 1.6, TH - 4);
+  c.beginPath(); c.moveTo(px - 4.5, 2); c.lineTo(px + 6, 2); c.lineTo(px + .8, 9); c.closePath(); c.fill();
+}
+tlc.addEventListener('pointerdown', e => {
+  tlc.setPointerCapture(e.pointerId);
+  setPlaying(false);
+  const scrub = ev => setFrame(x2f(ev.clientX - tlc.getBoundingClientRect().left));
+  scrub(e);
+  const mv = ev => scrub(ev);
+  const up = ev => {
+    tlc.removeEventListener('pointermove', mv);
+    tlc.removeEventListener('pointerup', up);
+    try { tlc.releasePointerCapture(ev.pointerId); } catch { }
+  };
+  tlc.addEventListener('pointermove', mv);
+  tlc.addEventListener('pointerup', up);
+});
+
+/* ============================================================================
+   13 · SMALL UI HELPERS
+   ========================================================================== */
+
+let toastT = 0;
+function toast(msg, isErr) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 1900);
+}
+const typing = () => {
+  const a = document.activeElement;
+  return a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
+};
+
+/* drag-to-scrub on numeric fields — VFX muscle memory, ~20 lines */
+function dragNum(input, step = 0.05) {
+  let sx = 0, sv = 0, drag = false, armed = false;
+  input.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    armed = true; drag = false; sx = e.clientX; sv = parseFloat(input.value) || 0;
+  });
+  input.addEventListener('pointermove', e => {
+    if (!armed) return;
+    if (!drag && Math.abs(e.clientX - sx) < 3) return;
+    if (!drag) { drag = true; input.setPointerCapture(e.pointerId); input.style.cursor = 'ew-resize'; }
+    const mult = e.shiftKey ? 0.1 : e.ctrlKey ? 10 : 1;
+    input.value = round(sv + (e.clientX - sx) * step * mult, 4);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    e.preventDefault();
+  });
+  const done = e => {
+    if (drag) { input.dispatchEvent(new Event('change', { bubbles: true })); try { input.releasePointerCapture(e.pointerId); } catch { } }
+    armed = false; drag = false; input.style.cursor = '';
+  };
+  input.addEventListener('pointerup', done);
+  input.addEventListener('pointercancel', done);
+}
+
+function section(title, key, open = true) {
+  const s = el('div', 'sect' + (open ? '' : ' collapsed'));
+  const t = el('div', 'stitle');
+  t.appendChild(el('span', 'tw', '▼'));
+  t.appendChild(el('span', null, title));
+  t.onclick = () => { s.classList.toggle('collapsed'); if (key) COLL[key] = s.classList.contains('collapsed'); };
+  s.appendChild(t);
+  if (key && COLL[key]) s.classList.add('collapsed');
+  return s;
+}
+const COLL = {};
+function row(label) {
+  const r = el('div', 'row');
+  if (label != null) r.appendChild(el('label', null, label));
+  return r;
+}
+function numField(val, onCommit, step) {
+  const i = el('input', 'num'); i.type = 'number'; i.step = step ?? 'any';
+  i.value = round(val, 4);
+  i.addEventListener('input', () => onCommit(parseFloat(i.value), false));
+  i.addEventListener('change', () => { onCommit(parseFloat(i.value), true); });
+  i.addEventListener('keydown', e => { if (e.key === 'Enter') i.blur(); });
+  dragNum(i, step === 1 ? 1 : 0.05);
+  return i;
+}
+function rangeField(val, min, max, stp, onInput) {
+  const r = el('input'); r.type = 'range'; r.min = min; r.max = max; r.step = stp; r.value = val;
+  r.addEventListener('input', () => onInput(parseFloat(r.value)));
+  r.addEventListener('pointerdown', () => pushUndo());
+  return r;
+}
+function selectField(items, cur, onChange) {
+  const s = el('select');
+  items.forEach((it, i) => {
+    const o = el('option', null, it.n ?? it);
+    o.value = it.v ?? i;
+    s.appendChild(o);
+  });
+  s.value = cur;
+  s.addEventListener('change', () => onChange(s.value));
+  return s;
+}
+function checkRow(label, val, onChange) {
+  const r = row(null);
+  const c = el('input'); c.type = 'checkbox'; c.checked = !!val;
+  c.style.flex = '0 0 auto';
+  c.addEventListener('change', () => onChange(c.checked));
+  const l = el('label', null, label); l.style.cursor = 'pointer';
+  l.onclick = () => { c.checked = !c.checked; onChange(c.checked); };
+  r.append(c, l);
+  return r;
+}
+
+
+/* ============================================================================
+   14 · GIZMO ATTACH & GROUP TRANSFORM
+   ========================================================================== */
+
+const gProxy = new THREE.Object3D();
+helpers.add(gProxy);
+let gDrag = null;
+
+const gizmoBlocked = o => isCam(o) && focusPane().cam === o;
+
+function attachGizmo() {
+  const usable = S.sel.filter(o => !gizmoBlocked(o));
+  if (!S.gizmo || !usable.length) { tc.detach(); syncGizmoViewport(); return; }
+  if (usable.length === 1) {
+    tc.attach(usable[0]);
+    tc.setSpace(S.space);
+  } else {
+    const c = new THREE.Vector3();
+    for (const o of usable) c.add(o.getWorldPosition(new THREE.Vector3()));
+    c.divideScalar(usable.length);
+    gProxy.position.copy(c);
+    gProxy.rotation.set(0, 0, 0);
+    gProxy.scale.set(1, 1, 1);
+    gProxy.updateMatrixWorld(true);
+    tc.attach(gProxy);
+    tc.setSpace('world');
+  }
+  tc.setMode(S.gizmo);
+  syncGizmoViewport();
+}
+function beginGizmoDrag() {
+  if (tc.object !== gProxy) { gDrag = null; return; }
+  gProxy.updateMatrixWorld(true);
+  gDrag = {
+    inv: gProxy.matrixWorld.clone().invert(),
+    items: S.sel.filter(o => !gizmoBlocked(o)).map(o => {
+      o.updateMatrixWorld(true);
+      return { o, m: o.matrixWorld.clone() };
+    }),
+  };
+}
+function endGizmoDrag() { gDrag = null; attachGizmo(); }
+function onGizmoChange() {
+  if (gDrag) {                       // all objects are direct scene children → world == local
+    gProxy.updateMatrixWorld(true);
+    const d = gProxy.matrixWorld.clone().multiply(gDrag.inv);
+    for (const { o, m } of gDrag.items) d.clone().multiply(m).decompose(o.position, o.quaternion, o.scale);
+  }
+  applyAim();                        // moving a null must re-aim the cameras tracking it
+  for (const o of S.sel) refreshPath(o);
+  syncInspectorValues();
+}
+
+/* ============================================================================
+   15 · OUTLINER
+   ========================================================================== */
+
+const ICON = { box: '▪', sphere: '●', cylinder: '▮', cone: '▲', plane: '▬', figure: '☖', camera: '🎥', null: '✛' };
+
+function rebuildOutliner() {
+  const host = $('#outliner');
+  host.innerHTML = '';
+  $('#objCount').textContent = S.objects.length;
+  rebuildPovSel();
+  if (!S.objects.length) {
+    host.appendChild(el('div', 'empty', 'Empty scene.\nAdd a primitive or a camera from the toolbar.'));
+    return;
+  }
+  const cams = S.objects.filter(isCam);
+  const rest = S.objects.filter(o => !isCam(o));
+  for (const o of [...cams, ...rest]) host.appendChild(outlinerItem(o));
+}
+
+function outlinerItem(o) {
+  const u = o.userData;
+  const it = el('div', 'item' + (S.sel.includes(o) ? ' sel' : ''));
+  const ico = el('span', 'ico', ICON[u.kind] || '▫');
+  if (isCam(o)) {
+    ico.style.cursor = 'pointer';
+    ico.title = 'Look through this camera';
+    if (S.lookThrough === o) ico.style.opacity = '1';
+    ico.onclick = e => { e.stopPropagation(); setLookThrough(S.lookThrough === o ? null : o); };
+  }
+  const nm = el('span', 'nm', u.pname);
+  if (isCam(o) && S.lookThrough === o) nm.style.fontWeight = '650';
+  const tag = el('span', 'tag', isCam(o) ? Math.round(u.focal) + 'mm' : (keyFramesOf(o).length ? '◆' + keyFramesOf(o).length : ''));
+  const eye = el('span', 'eye' + (o.visible ? '' : ' off'), o.visible ? '◉' : '⦸');
+  eye.title = 'Show / hide';
+  eye.onclick = e => { e.stopPropagation(); o.visible = !o.visible; rebuildOutliner(); S.dirty = true; };
+
+  it.append(ico, nm, tag, eye);
+  it.onclick = e => {
+    if (e.shiftKey) select(S.sel.includes(o) ? S.sel.filter(x => x !== o) : [...S.sel, o]);
+    else select([o]);
+  };
+  it.ondblclick = e => {
+    e.stopPropagation();
+    const inp = el('input', 'rn');
+    inp.value = u.pname;
+    it.replaceChild(inp, nm);
+    inp.focus(); inp.select();
+    const commit = () => {
+      const v = inp.value.trim();
+      if (v && v !== u.pname) { pushUndo(); u.pname = v; }
+      rebuildOutliner(); syncInspector();
+    };
+    inp.onblur = commit;
+    inp.onkeydown = ev => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') inp.blur();
+      if (ev.key === 'Escape') { inp.onblur = null; rebuildOutliner(); }
+    };
+  };
+  return it;
+}
+
+function rebuildPovSel() {
+  const sel = $('#povSel');
+  const cams = S.objects.filter(isCam);
+  sel.innerHTML = '';
+  if (!cams.length) {
+    const o = el('option', null, 'no camera'); o.value = '';
+    sel.appendChild(o); sel.disabled = true; return;
+  }
+  sel.disabled = false;
+  for (const c of cams) {
+    const o = el('option', null, c.userData.pname + '  ' + Math.round(c.userData.focal) + 'mm');
+    o.value = c.userData.pvid;
+    sel.appendChild(o);
+  }
+  const cur = S.lookThrough || cams[0];
+  sel.value = cur.userData.pvid;
+}
+
+/* ============================================================================
+   16 · INSPECTOR
+   ========================================================================== */
+
+let INSP = [], KEYBADGE = [];
+const reg = (input, getter) => { INSP.push({ input, getter }); return input; };
+
+function syncInspectorValues() {
+  for (const { input, getter } of INSP) {
+    if (document.activeElement === input) continue;
+    const v = getter();
+    if (!isFinite(v)) continue;
+    if (input.type === 'range') { if (Math.abs(parseFloat(input.value) - v) > 1e-6) input.value = v; }
+    else { const s = String(round(v, 4)); if (input.value !== s) input.value = s; }
+  }
+  for (const { btn, o, ch } of KEYBADGE) {
+    const on = (o.userData.tracks[ch] || []).some(k => k.f === S.cur);
+    btn.classList.toggle('on', on);
+  }
+  updateHud();
+}
+
+function afterEdit(o, chans) {
+  if (o) {
+    applyAim();
+    if (S.autokey && chans) setKeysCh(o, chans.filter(c => keyableChans(o, ['t', 'r', 's', 'f']).includes(c)), true);
+    refreshPath(o);
+    if (single() === o) selBox.setFromObject(o);
+  }
+  syncInspectorValues();
+  S.dirty = true;
+}
+
+function chanRow(o, ch, min, max, step) {
+  const r = el('div', 'row');
+  const lab = el('label', null, CH_LABEL[ch].split(' ')[1] || CH_LABEL[ch]);
+  lab.style.cssText = 'width:14px;flex:0 0 auto;font-family:var(--mono);font-size:10px;text-align:center';
+  if (ch[0] !== 'f') lab.style.color = { x: '#e06c7a', y: '#8fca5c', z: '#5a9cf0' }[ch[1]] || '';
+  const n = numField(getChan(o, ch), (v, commit) => {
+    if (!isFinite(v)) return;
+    if (commit) pushUndo();
+    setChan(o, ch, v); afterEdit(o, [ch]);
+  }, step);
+  n.style.cssText = 'width:58px;flex:0 0 auto';
+  reg(n, () => getChan(o, ch));
+  const rg = rangeField(getChan(o, ch), min, max, step, v => { setChan(o, ch, v); afterEdit(o, [ch]); });
+  rg.style.flex = '1 1 auto';
+  reg(rg, () => getChan(o, ch));
+  const kb = el('button', 'chip', '◆');
+  kb.title = 'Key ' + CH_LABEL[ch] + ' at frame ' + S.cur + ' (click again to remove)';
+  kb.onclick = () => { toggleKeyChannel(o, ch); syncInspectorValues(); };
+  KEYBADGE.push({ btn: kb, o, ch });
+  r.append(lab, n, rg, kb);
+  return r;
+}
+function groupKeyBtn(o, g, label) {
+  const b = el('button', 'mini', '◆ ' + label);
+  b.title = 'Key all ' + label + ' channels at frame ' + S.cur;
+  b.onclick = () => { setKeys(o, [g]); syncInspectorValues(); };
+  return b;
+}
+
+function syncInspector() {
+  const host = $('#inspector');
+  INSP = []; KEYBADGE = [];
+  host.innerHTML = '';
+  const o = single();
+  $('#inspName').textContent = S.sel.length > 1 ? S.sel.length + ' selected' : (o ? o.userData.pname : '—');
+
+  /* ---- SHOT (always visible) ---- */
+  {
+    const s = section('Shot', 'shot');
+    const r1 = row('Aspect');
+    r1.appendChild(selectField(ASPECTS.map((a, i) => ({ n: a.n, v: i })),
+      String(ASPECTS.findIndex(a => Math.abs(a.v - S.aspect) < 1e-4)),
+      v => { pushUndo(); S.aspect = ASPECTS[+v].v; refreshAllPaths(); syncInspectorValues(); S.dirty = true; }));
+    const r2 = row('Filmback');
+    r2.appendChild(selectField(FILMBACKS.map((f, i) => ({ n: f.n, v: i })), String(S.filmback),
+      v => { pushUndo(); S.filmback = +v; syncInspector(); S.dirty = true; }));
+    const r3 = row('View');
+    const bs = el('div', 'chips');
+    for (const [m, t] of [['single', 'single'], ['vsplit', 'split ◫'], ['hsplit', 'split ⬓']]) {
+      const b = el('button', 'chip' + (S.layout === m ? ' on' : ''), t);
+      b.onclick = () => setLayout(m);
+      bs.appendChild(b);
+    }
+    r3.appendChild(bs);
+    s.append(r1, r2, r3);
+    const cams = S.objects.filter(isCam);
+    if (cams.length) {
+      const r4 = row('Look thru');
+      r4.appendChild(selectField(
+        [{ n: '— perspective —', v: '-1' }, ...cams.map(c => ({ n: c.userData.pname, v: String(c.userData.pvid) }))],
+        String(S.lookThrough ? S.lookThrough.userData.pvid : -1),
+        v => setLookThrough(+v === -1 ? null : byId(+v))));
+      s.appendChild(r4);
+    }
+    host.appendChild(s);
+  }
+
+  if (!S.sel.length) {
+    const s = section('Getting started', 'gs');
+    s.appendChild(el('div', 'hint',
+      'Add primitives and a camera from the top bar. Alt+drag to navigate. ' +
+      'Select a camera and click its 🎥 icon to look through it, or switch to a split view ' +
+      'to block the shot in 3D and watch the POV at the same time.\n\n' +
+      'Set keys with S, scrub the timeline, then hit Render.'));
+    host.appendChild(s);
+    syncInspectorValues();
+    return;
+  }
+  if (S.sel.length > 1) {
+    const s = section('Multi-selection', 'ms');
+    s.appendChild(el('div', 'hint', S.sel.length + ' objects selected. The gizmo transforms them as a group. ' +
+      'S keys all of them; Del removes them.'));
+    const r = row(null);
+    const b1 = el('button', 'mini', '◆ Key all');
+    b1.onclick = () => { for (const x of S.sel) setKeys(x, ['t', 'r', 's'], true); toast('Keyed ' + S.sel.length + ' @ ' + S.cur); drawTimeline(); };
+    const b2 = el('button', 'mini', 'Delete');
+    b2.onclick = () => deleteSelected();
+    r.append(b1, b2);
+    s.appendChild(r);
+    host.appendChild(s);
+    syncInspectorValues();
+    return;
+  }
+
+  const u = o.userData;
+  const cam = isCam(o);
+
+  /* ---- OBJECT ---- */
+  {
+    const s = section('Object', 'obj');
+    const r1 = row('Name');
+    const ni = el('input'); ni.value = u.pname;
+    ni.onchange = () => { const v = ni.value.trim(); if (v) { pushUndo(); u.pname = v; rebuildOutliner(); $('#inspName').textContent = v; } };
+    ni.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') ni.blur(); };
+    r1.appendChild(ni);
+    s.appendChild(r1);
+    if (u.mat) {
+      const r2 = row('Colour');
+      const ci = el('input'); ci.type = 'color'; ci.value = '#' + u.mat.color.getHexString();
+      ci.style.cssText = 'height:22px;padding:1px;cursor:pointer';
+      ci.oninput = () => { u.mat.color.set(ci.value); S.dirty = true; };
+      r2.appendChild(ci);
+      s.appendChild(r2);
+    }
+    s.appendChild(checkRow('Visible', o.visible, v => { o.visible = v; rebuildOutliner(); S.dirty = true; }));
+    host.appendChild(s);
+  }
+
+  /* ---- TRANSFORM ---- */
+  {
+    const s = section('Transform', 'xf');
+    const h1 = row(null); h1.style.marginTop = '2px';
+    h1.append(el('label', null, 'Position'), grow(), groupKeyBtn(o, 't', 'P'));
+    s.appendChild(h1);
+    for (const ch of ['px', 'py', 'pz']) s.appendChild(chanRow(o, ch, -50, 50, 0.01));
+    if (!(cam && u.aimId)) {
+      const h2 = row(null); h2.style.marginTop = '7px';
+      h2.append(el('label', null, 'Rotation °'), grow(), groupKeyBtn(o, 'r', 'R'));
+      s.appendChild(h2);
+      for (const ch of ['rx', 'ry', 'rz']) s.appendChild(chanRow(o, ch, -180, 180, 0.1));
+    } else {
+      s.appendChild(el('div', 'hint', 'Rotation is driven by the aim target.'));
+    }
+    if (!cam && u.kind !== 'null') {
+      const h3 = row(null); h3.style.marginTop = '7px';
+      h3.append(el('label', null, 'Scale'), grow(), groupKeyBtn(o, 's', 'S'));
+      s.appendChild(h3);
+      for (const ch of ['sx', 'sy', 'sz']) s.appendChild(chanRow(o, ch, 0.01, 10, 0.01));
+    }
+    const r = row(null); r.style.marginTop = '7px';
+    const bz = el('button', 'mini', 'Reset');
+    bz.onclick = () => { pushUndo(); o.position.set(0, cam ? 1.6 : 0, 0); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1); afterEdit(o); syncInspector(); };
+    const bg = el('button', 'mini', 'Drop to floor');
+    bg.onclick = () => {
+      pushUndo();
+      const b = new THREE.Box3().setFromObject(o);
+      if (!b.isEmpty()) { o.position.y -= b.min.y; afterEdit(o, ['py']); syncInspectorValues(); }
+    };
+    r.append(bz, bg);
+    s.appendChild(r);
+    host.appendChild(s);
+  }
+
+  /* ---- GEOMETRY ---- */
+  if (u.params && Object.keys(u.params).length && !cam && u.kind !== 'figure' && u.kind !== 'null') {
+    const s = section('Geometry', 'geo');
+    const LBL = { w: 'Width', h: 'Height', d: 'Depth', r: 'Radius' };
+    for (const k of Object.keys(u.params)) {
+      const r = row(LBL[k] || k);
+      const n = numField(u.params[k], (v, commit) => {
+        if (!isFinite(v) || v <= 0) return;
+        if (commit) pushUndo();
+        u.params[k] = v;
+        o.geometry.dispose();
+        o.geometry = geoFor(u.kind, u.params);
+        afterEdit(o);
+      }, 0.01);
+      r.appendChild(n);
+      s.appendChild(r);
+    }
+    host.appendChild(s);
+  }
+
+  /* ---- CAMERA ---- */
+  if (cam) {
+    const s = section('Camera', 'cam');
+    const rf = row('Focal mm');
+    const fn = numField(u.focal, (v, commit) => {
+      if (!isFinite(v)) return;
+      if (commit) pushUndo();
+      setChan(o, 'fl', v); ft.value = focal2t(u.focal); afterEdit(o, ['fl']);
+    }, 1);
+    fn.style.cssText = 'width:56px;flex:0 0 auto';
+    reg(fn, () => u.focal);
+    const ft = rangeField(focal2t(u.focal), 0, 1, 0.0005, t => { setChan(o, 'fl', t2focal(t)); afterEdit(o, ['fl']); });
+    ft.style.flex = '1 1 auto';
+    reg(ft, () => focal2t(u.focal));
+    const fk = el('button', 'chip', '◆');
+    fk.title = 'Key focal length at frame ' + S.cur;
+    fk.onclick = () => { toggleKeyChannel(o, 'fl'); syncInspectorValues(); };
+    KEYBADGE.push({ btn: fk, o, ch: 'fl' });
+    rf.append(fn, ft, fk);
+    s.appendChild(rf);
+
+    const cp = el('div', 'chips'); cp.style.margin = '4px 0 7px';
+    for (const L of LENS_PRESETS) {
+      const b = el('button', 'chip' + (Math.abs(u.focal - L) < 0.6 ? ' on' : ''), String(L));
+      b.onclick = () => { pushUndo(); setChan(o, 'fl', L); ft.value = focal2t(L); afterEdit(o, ['fl']); syncInspector(); };
+      cp.appendChild(b);
+    }
+    s.appendChild(cp);
+
+    const vf = row('FOV');
+    const fovTxt = el('div', 'hint');
+    const updFov = () => {
+      const vfov = fovFromFocal(u.focal, S.aspect);
+      const hfov = 2 * Math.atan(F().w / 2 / u.focal) * RAD;
+      fovTxt.textContent = hfov.toFixed(1) + '° h  ·  ' + vfov.toFixed(1) + '° v';
+    };
+    updFov();
+    ft.addEventListener('input', updFov);
+    fn.addEventListener('input', updFov);
+    vf.appendChild(fovTxt);
+    s.appendChild(vf);
+
+    const rn = row('Near');
+    rn.appendChild(numField(o.near, (v, c) => { if (v > 0) { if (c) pushUndo(); o.near = v; o.updateProjectionMatrix(); S.dirty = true; } }, 0.01));
+    const rr = row('Far');
+    rr.appendChild(numField(o.far, (v, c) => { if (v > o.near) { if (c) pushUndo(); o.far = v; o.updateProjectionMatrix(); S.dirty = true; } }, 1));
+    s.append(rn, rr);
+
+    const nulls = S.objects.filter(x => x.userData.kind === 'null');
+    const ra = row('Aim at');
+    ra.appendChild(selectField(
+      [{ n: '— free rotation —', v: '-1' }, ...nulls.map(x => ({ n: x.userData.pname, v: String(x.userData.pvid) }))],
+      String(u.aimId ?? -1),
+      v => { pushUndo(); u.aimId = +v === -1 ? null : +v; evaluateFrame(S.cur); syncInspector(); S.dirty = true; }));
+    s.appendChild(ra);
+    if (!nulls.length) s.appendChild(el('div', 'hint', 'Add a Null to use it as an aim target — the camera will track it, which is how camera moves are usually blocked.'));
+
+    const rb = row(null); rb.style.marginTop = '7px';
+    const lb = el('button', 'mini' + (S.lookThrough === o ? ' on' : ''), S.lookThrough === o ? '● Looking through' : 'Look through');
+    lb.onclick = () => setLookThrough(S.lookThrough === o ? null : o);
+    rb.appendChild(lb);
+    s.appendChild(rb);
+    host.appendChild(s);
+  }
+
+  /* ---- KEYS ---- */
+  {
+    const s = section('Animation', 'anim');
+    const ks = keyFramesOf(o);
+    const info = el('div', 'hint');
+    info.textContent = ks.length
+      ? ks.length + ' keyed frame' + (ks.length > 1 ? 's' : '') + ': ' + ks.slice(0, 14).join(', ') + (ks.length > 14 ? '…' : '')
+      : 'No keys yet. Pose it, then press S (or a ◆ badge) to key just that channel.';
+    s.appendChild(info);
+
+    if (ks.includes(S.cur)) {
+      const r = row('Interp');
+      r.appendChild(selectField(
+        [{ n: 'Spline (smooth)', v: 'spline' }, { n: 'Linear', v: 'linear' }, { n: 'Stepped (hold)', v: 'step' }],
+        currentInterp(o),
+        v => {
+          pushUndo();
+          for (const ch of CH_ALL) for (const k of (o.userData.tracks[ch] || [])) if (k.f === S.cur) k.i = v;
+          refreshPath(o); S.dirty = true; syncInspector();
+        }));
+      s.appendChild(r);
+      s.appendChild(el('div', 'hint', 'Applies to every key on this object at frame ' + S.cur +
+        '. Spline eases automatically into the first and last key.'));
+    }
+    const r2 = row(null); r2.style.marginTop = '7px';
+    const b1 = el('button', 'mini', '◆ Key all');
+    b1.onclick = () => { setKeys(o, ['t', 'r', 's', 'f']); syncInspector(); };
+    const b2 = el('button', 'mini', 'Del @ frame');
+    b2.onclick = () => { pushUndo(); deleteKeys(o, null); syncInspector(); };
+    const b3 = el('button', 'mini', 'Clear all');
+    b3.onclick = () => { pushUndo(); clearAllKeys(o); };
+    r2.append(b1, b2, b3);
+    s.appendChild(r2);
+    host.appendChild(s);
+  }
+
+  syncInspectorValues();
+}
+function currentInterp(o) {
+  for (const ch of CH_ALL) for (const k of (o.userData.tracks[ch] || [])) if (k.f === S.cur) return k.i || 'spline';
+  return 'spline';
+}
+function grow() { const d = el('div'); d.style.flex = '1'; return d; }
+
+function deleteSelected() {
+  if (!S.sel.length) return;
+  pushUndo();
+  const n = S.sel.length;
+  for (const o of [...S.sel]) removeObject(o);
+  select([]);
+  rebuildOutliner(); syncInspector(); drawTimeline();
+  toast('Deleted ' + n + ' object' + (n > 1 ? 's' : ''));
+}
+
+/* ============================================================================
+   17 · SERIALIZE / UNDO / SAVE / LOAD
+   ========================================================================== */
+
+function serializeObject(o) {
+  const u = o.userData;
+  const d = {
+    id: u.pvid, kind: u.kind, name: u.pname, visible: o.visible,
+    pos: o.position.toArray().map(v => round(v, 5)),
+    rot: [o.rotation.x * RAD, o.rotation.y * RAD, o.rotation.z * RAD].map(v => round(v, 4)),
+    scl: o.scale.toArray().map(v => round(v, 5)),
+    tracks: JSON.parse(JSON.stringify(u.tracks || {})),
+  };
+  if (u.params) d.params = { ...u.params };
+  if (u.mat) d.color = '#' + u.mat.color.getHexString();
+  if (isCam(o)) { d.focal = round(u.focal, 3); d.near = round(o.near, 4); d.far = round(o.far, 2); d.aimId = u.aimId ?? null; }
+  return d;
+}
+function deserializeObject(d) {
+  let o;
+  if (d.kind === 'camera') o = addCamera({ focal: d.focal, near: d.near, far: d.far, name: d.name, pos: d.pos, aimId: d.aimId });
+  else if (d.kind === 'null') o = addNull({ name: d.name, pos: d.pos });
+  else o = addPrimitive(d.kind, { params: d.params, name: d.name });
+  if (!o) return null;
+  if (d.id != null) { o.userData.pvid = d.id; S.uid = Math.max(S.uid, d.id + 1); }
+  if (d.pos) o.position.fromArray(d.pos);
+  if (d.rot) o.rotation.set(d.rot[0] * DEG, d.rot[1] * DEG, d.rot[2] * DEG);
+  if (d.scl) o.scale.fromArray(d.scl);
+  o.visible = d.visible !== false;
+  o.userData.tracks = d.tracks || {};
+  if (d.color && o.userData.mat) o.userData.mat.color.set(d.color);
+  return o;
+}
+function serializeScene() {
+  return {
+    app: 'previz', v: 1,
+    fps: S.fps, start: S.start, end: S.end, cur: S.cur,
+    aspect: S.aspect, filmback: S.filmback,
+    layout: S.layout, splitPos: S.splitPos,
+    view: { grid: S.showGrid, gate: S.showGate, guides: S.showGuides, paths: S.showPaths, wire: S.wire },
+    lookThrough: S.lookThrough ? S.lookThrough.userData.pvid : null,
+    sel: S.sel.map(o => o.userData.pvid),
+    persp: { pos: persp.position.toArray(), pivot: persp.userData.pivot.toArray() },
+    objects: S.objects.map(serializeObject),
+  };
+}
+function loadScene(d, quiet) {
+  if (!d || d.app !== 'previz') { toast('Not a PreViz scene file', true); return; }
+  for (const o of [...S.objects]) removeObject(o);
+  S.objects = []; S.sel = []; S.uid = 1; S.lookThrough = null;
+  S.fps = d.fps ?? 24; S.start = d.start ?? 1; S.end = d.end ?? 120;
+  S.aspect = d.aspect ?? 2.39024; S.filmback = d.filmback ?? 0;
+  S.layout = d.layout ?? 'single'; S.splitPos = d.splitPos ?? 0.5;
+  if (d.view) { S.showGrid = d.view.grid; S.showGate = d.view.gate; S.showGuides = d.view.guides; S.showPaths = d.view.paths; S.wire = !!d.view.wire; }
+  for (const od of (d.objects || [])) deserializeObject(od);
+  if (d.persp) { persp.position.fromArray(d.persp.pos); persp.userData.pivot.fromArray(d.persp.pivot); persp.up.set(0, 1, 0); persp.lookAt(persp.userData.pivot); }
+  S.lookThrough = d.lookThrough != null ? byId(d.lookThrough) : null;
+  applyWire();
+  setLayout(S.layout);
+  syncToolbarToggles();
+  S.cur = clamp(d.cur ?? S.start, S.start, S.end);
+  select((d.sel || []).map(byId).filter(Boolean));
+  syncTimelineInputs();
+  setFrame(S.cur);
+  refreshAllPaths();
+  if (!quiet) toast('Scene loaded — ' + S.objects.length + ' objects');
+}
+
+const UNDO = [], REDO = [];
+let undoLock = false;
+function pushUndo() {
+  if (undoLock) return;
+  UNDO.push(JSON.stringify(serializeScene()));
+  if (UNDO.length > 50) UNDO.shift();
+  REDO.length = 0;
+}
+function doUndo() {
+  if (!UNDO.length) { toast('Nothing to undo'); return; }
+  REDO.push(JSON.stringify(serializeScene()));
+  undoLock = true; loadScene(JSON.parse(UNDO.pop()), true); undoLock = false;
+  toast('Undo');
+}
+function doRedo() {
+  if (!REDO.length) { toast('Nothing to redo'); return; }
+  UNDO.push(JSON.stringify(serializeScene()));
+  undoLock = true; loadScene(JSON.parse(REDO.pop()), true); undoLock = false;
+  toast('Redo');
+}
+
+function download(blob, name) {
+  const u = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
+function saveScene() {
+  download(new Blob([JSON.stringify(serializeScene(), null, 1)], { type: 'application/json' }),
+    'previz_scene_' + new Date().toISOString().slice(0, 10) + '.json');
+  toast('Scene saved');
+}
+
+/* ============================================================================
+   18 · EXPORT
+   ========================================================================== */
+
+const CAP = {
+  webcodecs: typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined',
+  recorder: typeof MediaRecorder !== 'undefined',
+  recMp4: typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.('video/mp4;codecs=avc1.42E01E'),
+  recWebm: typeof MediaRecorder !== 'undefined' && (MediaRecorder.isTypeSupported?.('video/webm;codecs=vp9') || MediaRecorder.isTypeSupported?.('video/webm;codecs=vp8')),
+};
+const EX = {
+  camId: null, format: 'auto', fps: null, f0: null, f1: null, quality: 'high', burnIn: true,
+  width: 1920, height: null,
+  // 'shot' = follow the gate you blocked with · '<index>' = a preset ratio · 'custom' = free W×H
+  aspectMode: 'shot',
+};
+let refreshResFields = () => { };
+let exporting = false, exportCancel = false;
+
+const expCanvas = document.createElement('canvas');
+const expCtx = expCanvas.getContext('2d', { alpha: false });
+
+/* MessageChannel yields are NOT throttled the way setTimeout is in background
+   tabs, so a long render keeps making progress if the user tabs away. */
+const _mc = new MessageChannel(), _yq = [];
+_mc.port1.onmessage = () => { const f = _yq.shift(); if (f) f(); };
+const yieldUI = () => new Promise(r => { _yq.push(r); _mc.port2.postMessage(0); });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+const fmtFps = v => Number.isInteger(v) ? String(v) : v.toFixed(3);
+const BPP = { draft: 0.05, good: 0.11, high: 0.20 };
+const bitrateFor = (w, h, fps, q) => clamp(Math.round(w * h * fps * (BPP[q] ?? 0.11)), 800e3, 240e6);
+const evenClamp = v => { let x = Math.round(v); if (x % 2) x++; return clamp(x, 16, Math.min(7680, MAXTEX)); };
+
+const fmtAspect = a => {
+  const hit = ASPECTS.find(x => Math.abs(x.v - a) < 2e-3);
+  return hit ? hit.n.split('  ')[0] : (a >= 1 ? a.toFixed(2) + ' : 1' : '1 : ' + (1 / a).toFixed(2));
+};
+/* null means "free" — the ratio is whatever the typed W×H works out to */
+const targetAspect = () =>
+  EX.aspectMode === 'shot' ? S.aspect
+    : EX.aspectMode === 'custom' ? null
+      : (ASPECTS[+EX.aspectMode]?.v ?? S.aspect);
+
+/* pure: never mutates EX, so it is safe to call while the user is mid-keystroke */
+function exportDims() {
+  const w = evenClamp(EX.width);
+  const a = targetAspect();
+  const h = a ? evenClamp(w / a) : evenClamp(EX.height || w / S.aspect);
+  return { w, h, aspect: w / h };
+}
+/* presets name the LONG edge, so "UHD 4K" is 3840 wide in scope and 3840 tall in 9:16 */
+function presetDims(base) {
+  const a = targetAspect() ?? (evenClamp(EX.width) / evenClamp(EX.height || EX.width / S.aspect));
+  return a >= 1 ? { w: evenClamp(base), h: evenClamp(base / a) }
+    : { w: evenClamp(base * a), h: evenClamp(base) };
+}
+function timecode(f, fps) {
+  const t = Math.max(0, f - 1), F0 = Math.max(1, Math.round(fps));
+  const p = v => String(v).padStart(2, '0');
+  return p(Math.floor(t / (F0 * 3600))) + ':' + p(Math.floor(t / (F0 * 60)) % 60) + ':' + p(Math.floor(t / F0) % 60) + ':' + p(t % F0);
+}
+
+function buildExportUI() {
+  const b = $('#exportBody');
+  b.innerHTML = '';
+  const cams = S.objects.filter(isCam);
+  if (EX.camId == null) EX.camId = S.lookThrough ? S.lookThrough.userData.pvid : (cams[0] ? cams[0].userData.pvid : -1);
+  if (!cams.length) EX.camId = -1;
+  if (EX.fps == null) EX.fps = S.fps;
+  EX.f0 = S.start; EX.f1 = S.end;
+
+  const mrow = lab => { const r = el('div', 'mrow'); r.appendChild(el('label', null, lab)); return r; };
+
+  const r0 = mrow('Camera');
+  r0.appendChild(selectField(
+    [...cams.map(c => ({ n: c.userData.pname + '  ' + Math.round(c.userData.focal) + 'mm', v: String(c.userData.pvid) })),
+     { n: 'Perspective viewport', v: '-1' }],
+    String(EX.camId), v => { EX.camId = +v; refreshExportInfo(); }));
+  b.appendChild(r0);
+
+  const r1 = mrow('Format');
+  const opts = [{ n: 'Auto — best available', v: 'auto' }];
+  if (CAP.webcodecs) opts.push({ n: 'MP4 / H.264 — frame-exact', v: 'mp4' });
+  if (CAP.recorder) opts.push({ n: (CAP.recMp4 ? 'MP4' : 'WebM') + ' — MediaRecorder (realtime)', v: 'rec' });
+  opts.push({ n: 'PNG sequence (.zip)', v: 'png' });
+  r1.appendChild(selectField(opts, EX.format, v => { EX.format = v; refreshExportInfo(); }));
+  b.appendChild(r1);
+
+  /* ---- aspect ratio ---- */
+  const rAsp = mrow('Aspect');
+  const asel = selectField([
+    { n: 'Match shot gate   ' + fmtAspect(S.aspect), v: 'shot' },
+    ...ASPECTS.map((a, i) => ({ n: a.n, v: String(i) })),
+    { n: 'Custom   (free W × H)', v: 'custom' },
+  ], String(EX.aspectMode), v => {
+    EX.aspectMode = v;
+    if (v !== 'custom') EX.height = exportDims().h;   // re-lock height to the new ratio
+    refreshResFields(); refreshExportInfo();
+  });
+  rAsp.appendChild(asel);
+  b.appendChild(rAsp);
+
+  /* ---- resolution: preset + typeable width × height ---- */
+  const rRes = mrow('Resolution');
+  const PRESETS = [{ n: 'HD 720', v: 1280 }, { n: 'HD 1080', v: 1920 }, { n: '2K DCI', v: 2048 }, { n: 'UHD 4K', v: 3840 }];
+  const psel = el('select');
+  psel.style.cssText = 'flex:1 1 auto;min-width:0';
+  const wIn = el('input'), hIn = el('input');
+  for (const i of [wIn, hIn]) {
+    i.type = 'number'; i.step = '2'; i.min = '16';
+    i.style.cssText = 'width:66px;flex:0 0 auto;text-align:right';
+  }
+  const buildPresets = () => {
+    const d = exportDims();
+    psel.innerHTML = '';
+    for (const p of PRESETS) {
+      const pd = presetDims(p.v);
+      const o = el('option', null, p.n + '   ' + pd.w + ' × ' + pd.h);
+      o.value = String(p.v);
+      psel.appendChild(o);
+    }
+    const o = el('option', null, 'Custom'); o.value = '0'; psel.appendChild(o);
+    const hit = PRESETS.find(p => { const pd = presetDims(p.v); return pd.w === d.w && pd.h === d.h; });
+    psel.value = hit ? String(hit.v) : '0';
+  };
+  psel.onchange = () => {
+    const base = +psel.value;
+    if (!base) return;
+    const pd = presetDims(base);
+    EX.width = pd.w; EX.height = pd.h;
+    refreshResFields(); refreshExportInfo();
+  };
+  wIn.oninput = () => {
+    const v = parseInt(wIn.value, 10); if (!(v > 0)) return;
+    EX.width = v;
+    if (EX.aspectMode !== 'custom') { const d = exportDims(); EX.height = d.h; hIn.value = d.h; }
+    refreshExportInfo();
+  };
+  // typing a height frees the ratio — that is what "custom W×H" means
+  hIn.oninput = () => {
+    const v = parseInt(hIn.value, 10); if (!(v > 0)) return;
+    if (EX.aspectMode !== 'custom') { EX.aspectMode = 'custom'; asel.value = 'custom'; }
+    EX.height = v;
+    refreshExportInfo();
+  };
+  for (const i of [wIn, hIn]) {
+    i.onchange = () => { refreshResFields(); refreshExportInfo(); };
+    i.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') i.blur(); };
+    dragNum(i, 1);
+  }
+  refreshResFields = () => {
+    const d = exportDims();
+    EX.width = d.w; EX.height = d.h;
+    wIn.value = d.w; hIn.value = d.h;
+    buildPresets();
+  };
+  rRes.append(psel, wIn, el('label', null, '×'), hIn);
+  b.appendChild(rRes);
+  refreshResFields();
+
+  const r3 = mrow('Frame rate');
+  const fsel = selectField(
+    [12, 23.976, 24, 25, 29.97, 30, 48, 60].map(v => ({ n: fmtFps(v), v: String(v) })),
+    String(EX.fps), v => { EX.fps = parseFloat(v); refreshExportInfo(); });
+  r3.appendChild(fsel);
+  b.appendChild(r3);
+
+  const r4 = mrow('Frame range');
+  const s0 = el('input'); s0.type = 'number'; s0.value = EX.f0; s0.style.cssText = 'width:74px;flex:0 0 auto';
+  const s1 = el('input'); s1.type = 'number'; s1.value = EX.f1; s1.style.cssText = 'width:74px;flex:0 0 auto';
+  s0.oninput = () => { EX.f0 = parseInt(s0.value, 10) || 1; refreshExportInfo(); };
+  s1.oninput = () => { EX.f1 = parseInt(s1.value, 10) || 1; refreshExportInfo(); };
+  r4.append(s0, el('label', null, 'to'), s1);
+  b.appendChild(r4);
+
+  const r5 = mrow('Quality');
+  r5.appendChild(selectField(
+    [{ n: 'High', v: 'high' }, { n: 'Good', v: 'good' }, { n: 'Draft (small)', v: 'draft' }],
+    EX.quality, v => { EX.quality = v; refreshExportInfo(); }));
+  b.appendChild(r5);
+
+  const r6 = el('div', 'mrow');
+  const cb = el('input'); cb.type = 'checkbox'; cb.checked = EX.burnIn; cb.style.flex = '0 0 auto';
+  cb.onchange = () => { EX.burnIn = cb.checked; };
+  const cl = el('label', null, 'Burn in slate (camera, lens, frame, timecode)');
+  cl.style.cursor = 'pointer';
+  cl.onclick = () => { cb.checked = !cb.checked; EX.burnIn = cb.checked; };
+  r6.append(cb, cl);
+  b.appendChild(r6);
+
+  const info = el('div', 'plog'); info.id = 'expInfo'; info.style.marginTop = '10px';
+  b.appendChild(info);
+  const prog = el('div', 'prog'); prog.id = 'expProg'; prog.hidden = true; prog.appendChild(el('i'));
+  b.appendChild(prog);
+  const log = el('div', 'plog'); log.id = 'expLog'; log.hidden = true;
+  b.appendChild(log);
+  refreshExportInfo();
+}
+
+function refreshExportInfo() {
+  const { w, h, aspect } = exportDims();
+  const fps = EX.fps ?? S.fps;
+  const f0 = Math.min(EX.f0, EX.f1), f1 = Math.max(EX.f0, EX.f1);
+  const n = f1 - f0 + 1;
+  const secs = n / fps;
+  const fmt = chooseFormat();
+  const names = { mp4: 'MP4 / H.264 via WebCodecs — frame-exact CFR', rec: (CAP.recMp4 ? 'MP4' : 'WebM') + ' via MediaRecorder — realtime paced', png: 'PNG sequence in a .zip — frame-exact stills' };
+  const est = fmt === 'png'
+    ? '~' + (w * h * 1.6 * n / 1e6).toFixed(0) + ' MB (rough)'
+    : '~' + (bitrateFor(w, h, fps, EX.quality) * secs / 8e6).toFixed(1) + ' MB';
+  const lines = [
+    w + ' × ' + h + '   ' + fmtAspect(aspect) + (EX.aspectMode === 'shot' ? '   (shot gate)' : ''),
+    n + ' frames @ ' + fmtFps(fps) + ' = ' + secs.toFixed(2) + ' s',
+    names[fmt] || fmt,
+    'estimated size ' + est,
+  ];
+  if (Math.abs(aspect - S.aspect) > 0.01) lines.push(
+    '⚠ Output is ' + fmtAspect(aspect) + ' but the shot gate is ' + fmtAspect(S.aspect) +
+    ', so the render will not match what the POV pane frames. Horizontal field of view is kept; ' +
+    'the vertical opens up or crops. Set the gate to ' + fmtAspect(aspect) + ' in the Shot panel to block against it.');
+  if (fmt === 'rec') lines.push('⚠ MediaRecorder is wall-clock driven: the render runs in realtime and timing can drift on a slow GPU. Keep this tab focused.');
+  if (fmt === 'png') lines.push('⚠ Large. Assemble with ffmpeg:  ffmpeg -framerate ' + fmtFps(fps) + ' -i frame_%05d.png -c:v libx264 -crf 18 -pix_fmt yuv420p out.mp4');
+  if (!CAP.webcodecs && EX.format === 'mp4') lines.push('⚠ WebCodecs is not available in this browser.');
+  const box = $('#expInfo');
+  if (box) box.textContent = lines.join('\n');
+}
+function chooseFormat() {
+  if (EX.format !== 'auto') return EX.format;
+  if (CAP.webcodecs) return 'mp4';
+  if (CAP.recorder && (CAP.recMp4 || CAP.recWebm)) return 'rec';
+  return 'png';
+}
+function expLog(msg) {
+  const l = $('#expLog');
+  if (!l) return;
+  l.hidden = false;
+  l.textContent += (l.textContent ? '\n' : '') + msg;
+  l.scrollTop = l.scrollHeight;
+}
+function expProgress(t, label) {
+  const p = $('#expProg');
+  if (p) { p.hidden = false; p.firstChild.style.width = (t * 100).toFixed(1) + '%'; }
+  $('#expGo').textContent = label || (Math.round(t * 100) + '%');
+}
+
+function drawBurnIn(cfg, f) {
+  const g = expCtx;
+  const fs = clamp(Math.round(cfg.h * 0.021), 11, 46);
+  const pad = Math.round(fs * 0.95);
+  g.font = '600 ' + fs + 'px ui-monospace,SFMono-Regular,Consolas,monospace';
+  g.textBaseline = 'alphabetic';
+  g.shadowColor = 'rgba(0,0,0,.85)';
+  g.shadowBlur = Math.max(2, fs * 0.3);
+  g.fillStyle = 'rgba(255,255,255,.94)';
+  g.textAlign = 'left';
+  g.fillText(cfg.camName + '   ' + cfg.lens, pad, pad + fs * 0.85);
+  g.textAlign = 'right';
+  g.fillText('f ' + String(f).padStart(4, '0') + '   ' + timecode(f, cfg.fps), cfg.w - pad, pad + fs * 0.85);
+  g.textAlign = 'left';
+  g.fillStyle = 'rgba(255,255,255,.72)';
+  g.fillText(cfg.w + '×' + cfg.h + '   ' + fmtFps(cfg.fps) + ' fps   ' + cfg.aspectName, pad, cfg.h - pad);
+  g.shadowBlur = 0;
+}
+
+function renderExportFrame(cfg, f) {
+  const cam = cfg.cam;
+  cam.aspect = cfg.w / cfg.h;
+  if (cam.userData.focal) cam.fov = fovFromFocal(cam.userData.focal, cam.aspect);
+  cam.updateProjectionMatrix();
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, cfg.w, cfg.h);
+  renderer.setClearColor(BG, 1);
+  renderer.render(scene, cam);
+  // must copy in the same task as the draw — no await between render and here
+  expCtx.drawImage(canvas, 0, 0, cfg.w, cfg.h);
+  if (cfg.burnIn) drawBurnIn(cfg, f);
+}
+
+async function runExport() {
+  if (exporting) return;
+  const cams = S.objects.filter(isCam);
+  const cam = EX.camId === -1 ? persp : (byId(EX.camId) || cams[0] || persp);
+  const fps = EX.fps ?? S.fps;
+  const f0 = Math.min(EX.f0, EX.f1), f1 = Math.max(EX.f0, EX.f1);
+  const { w, h } = exportDims();
+  const fmt = chooseFormat();
+  const cfg = {
+    cam, camName: cam === persp ? 'persp' : cam.userData.pname,
+    lens: cam.userData.focal ? Math.round(cam.userData.focal) + 'mm  ' + F().w.toFixed(2) + 'mm gate' : 'viewport',
+    w, h, fps, f0, f1, total: f1 - f0 + 1, burnIn: EX.burnIn,
+    bitrate: bitrateFor(w, h, fps, EX.quality),
+    aspectName: fmtAspect(w / h),
+  };
+
+  exporting = true; exportCancel = false;
+  const savedCur = S.cur;
+  setPlaying(false);
+  $('#expGo').disabled = true;
+  $('#expCancel').textContent = 'Stop';
+  $('#expLog').textContent = '';
+
+  expCanvas.width = w; expCanvas.height = h;
+  renderer.setPixelRatio(1);
+  renderer.setSize(w, h, false);
+  helpers.visible = false;
+  // clean pass: camera rigs and aim-target nulls are blocking aids, not geometry,
+  // so they must never be baked into the render
+  const hidden = [];
+  for (const o of S.objects) {
+    if (isCam(o) && o.userData.gizmo?.visible) { o.userData.gizmo.visible = false; hidden.push(o.userData.gizmo); }
+    if (o.userData.kind === 'null' && o.visible) { o.visible = false; hidden.push(o); }
+  }
+
+  expLog('render ' + w + '×' + h + ' · ' + cfg.total + ' frames · ' + fmtFps(fps) + ' fps · ' + cfg.camName);
+  let out = null, err = null;
+  const t0 = performance.now();
+  try {
+    if (fmt === 'mp4') out = await exportWebCodecs(cfg);
+    else if (fmt === 'rec') out = await exportRecorder(cfg);
+    else out = await exportPngZip(cfg);
+  } catch (e) {
+    err = e;
+  }
+
+  for (const n of hidden) n.visible = true;
+  helpers.visible = true;
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  resize();
+  setFrame(savedCur);
+  exporting = false;
+  $('#expGo').disabled = false;
+  $('#expGo').textContent = 'Render';
+  $('#expCancel').textContent = 'Close';
+  const p = $('#expProg'); if (p) p.firstChild.style.width = '0%';
+
+  if (err) { expLog('✕ ' + (err.message || err)); toast('Render failed — ' + (err.message || err), true); return; }
+  if (!out) { expLog('■ stopped'); toast('Render stopped'); return; }
+  const secs = ((performance.now() - t0) / 1000).toFixed(1);
+  const name = 'previz_' + cfg.camName.replace(/[^\w-]+/g, '') + '_' + w + 'x' + h + '_' + fmtFps(fps).replace('.', '') + 'fps_f' + f0 + '-' + f1 + '.' + out.ext;
+  download(out.blob, name);
+  expLog('✓ ' + name + '  ·  ' + (out.blob.size / 1e6).toFixed(1) + ' MB  ·  ' + secs + ' s');
+  toast('Rendered ' + cfg.total + ' frames → ' + name);
+}
+
+/* --- primary: WebCodecs, exact CFR timestamps, inline MP4 mux --- */
+async function exportWebCodecs(cfg) {
+  const { w, h, fps, f0, total } = cfg;
+  let config = null;
+  for (const codec of ['avc1.640028', 'avc1.4D0028', 'avc1.42E01E']) {
+    // AvcBitstreamFormat is 'avc' | 'annexb'. 'avc' gives length-prefixed NALUs
+    // plus the parameter sets in decoderConfig.description — i.e. the avcC payload
+    // the muxer needs. ('avcc' is NOT a valid enum value and throws a TypeError.)
+    const t = {
+      codec, width: w, height: h, bitrate: cfg.bitrate, framerate: fps,
+      avc: { format: 'avc' }, latencyMode: 'quality',
+    };
+    let ok = false;
+    try { ok = (await VideoEncoder.isConfigSupported(t)).supported; } catch { ok = false; }
+    if (ok) { config = t; break; }
+  }
+  if (!config) throw new Error('no H.264 encoder config supported at ' + w + '×' + h);
+  expLog('encoder ' + config.codec + ' @ ' + (cfg.bitrate / 1e6).toFixed(1) + ' Mbps');
+
+  const mux = new Mp4Muxer(w, h, Math.round(fps * 1000));
+  let desc = null, encErr = null;
+  const enc = new VideoEncoder({
+    output: (chunk, meta) => {
+      if (!desc && meta?.decoderConfig?.description) desc = new Uint8Array(meta.decoderConfig.description);
+      const buf = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(buf);
+      mux.addSample(buf, chunk.type === 'key');
+    },
+    error: e => { encErr = e; },
+  });
+  enc.configure(config);
+
+  const gop = Math.max(1, Math.round(fps * 2));
+  for (let i = 0; i < total; i++) {
+    if (exportCancel) { try { enc.close(); } catch { } return null; }
+    if (encErr) throw encErr;
+    const f = f0 + i;
+    evaluateFrame(f);
+    renderExportFrame(cfg, f);
+    const vf = new VideoFrame(expCanvas, {
+      timestamp: Math.round(i * 1e6 / fps),
+      duration: Math.round(1e6 / fps),
+    });
+    enc.encode(vf, { keyFrame: i % gop === 0 });
+    vf.close();
+    while (enc.encodeQueueSize > 6 && !encErr) await yieldUI();
+    expProgress((i + 1) / total, 'frame ' + (i + 1) + ' / ' + total);
+    await yieldUI();
+  }
+  await enc.flush();
+  enc.close();
+  if (encErr) throw encErr;
+  if (!desc) throw new Error('encoder returned no avcC parameter sets');
+  mux.setAvcC(desc);
+  expProgress(1, 'muxing…');
+  await yieldUI();
+  return { blob: mux.finalize(), ext: 'mp4' };
+}
+
+/* --- fallback: MediaRecorder. Wall-clock driven, so it must be paced. --- */
+async function exportRecorder(cfg) {
+  const { fps, f0, total } = cfg;
+  const mime = [
+    'video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8', 'video/webm',
+  ].find(m => MediaRecorder.isTypeSupported?.(m));
+  if (!mime) throw new Error('MediaRecorder supports no usable container here');
+  expLog('recorder ' + mime + ' — realtime paced, keep the tab focused');
+
+  // capture the 2D composite canvas, not the GL one, so burn-in is recorded too
+  const stream = expCanvas.captureStream(0);
+  const track = stream.getVideoTracks()[0];
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: cfg.bitrate });
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(r => { rec.onstop = r; });
+  rec.start();
+
+  const spf = 1000 / fps;
+  const t0 = performance.now();
+  for (let i = 0; i < total; i++) {
+    if (exportCancel) break;
+    const f = f0 + i;
+    evaluateFrame(f);
+    renderExportFrame(cfg, f);
+    track.requestFrame?.();
+    expProgress((i + 1) / total, 'frame ' + (i + 1) + ' / ' + total);
+    const due = t0 + (i + 1) * spf;
+    const wait = due - performance.now();
+    if (wait > 1) await sleep(wait); else await yieldUI();
+  }
+  rec.stop();
+  await stopped;
+  if (exportCancel) return null;
+  const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+  return { blob: new Blob(chunks, { type: mime }), ext };
+}
+
+/* --- universal: PNG stills in a stored zip. Always frame-exact. --- */
+async function exportPngZip(cfg) {
+  const { f0, total } = cfg;
+  const zip = new ZipWriter();
+  for (let i = 0; i < total; i++) {
+    if (exportCancel) return null;
+    const f = f0 + i;
+    evaluateFrame(f);
+    renderExportFrame(cfg, f);
+    const blob = await new Promise(r => expCanvas.toBlob(r, 'image/png'));
+    if (!blob) throw new Error('PNG encode failed at frame ' + f);
+    zip.add('frame_' + String(i + 1).padStart(5, '0') + '.png', new Uint8Array(await blob.arrayBuffer()));
+    expProgress((i + 1) / total, 'frame ' + (i + 1) + ' / ' + total);
+  }
+  expProgress(1, 'zipping…');
+  await yieldUI();
+  return { blob: zip.finalize(), ext: 'zip' };
+}
+
+/* ============================================================================
+   19 · MINIMAL MP4 MUXER (single AVC track, CFR, no audio)
+   Enough of ISO/IEC 14496-12 to write a valid progressive MP4 — which keeps
+   the tool genuinely dependency-free. CCapture.js is abandoned and mp4-muxer
+   is deprecated in favour of mediabunny, so neither is a good CDN dependency.
+   ========================================================================== */
+
+const u8 = (...a) => new Uint8Array(a);
+const u16 = v => new Uint8Array([(v >> 8) & 255, v & 255]);
+const u32 = v => new Uint8Array([(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+const str = s => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+function concat(parts) {
+  let n = 0; for (const p of parts) n += p.length;
+  const o = new Uint8Array(n); let k = 0;
+  for (const p of parts) { o.set(p, k); k += p.length; }
+  return o;
+}
+const box = (type, ...kids) => { const b = concat(kids); return concat([u32(b.length + 8), str(type), b]); };
+const fullBox = (type, ver, flags, ...kids) =>
+  box(type, u8(ver), u8((flags >> 16) & 255, (flags >> 8) & 255, flags & 255), ...kids);
+const MAT_UNITY = concat([u32(0x00010000), u32(0), u32(0), u32(0), u32(0x00010000), u32(0), u32(0), u32(0), u32(0x40000000)]);
+
+class Mp4Muxer {
+  constructor(w, h, timescale) {
+    this.w = w | 0; this.h = h | 0; this.ts = timescale | 0;
+    this.samples = []; this.bytes = 0; this.avcC = null;
+  }
+  addSample(data, isKey) { this.samples.push({ data, isKey: !!isKey }); this.bytes += data.length; }
+  setAvcC(d) { this.avcC = d; }
+  finalize() {
+    if (!this.avcC) throw new Error('missing avcC parameter sets');
+    if (this.bytes > 3.6e9) throw new Error('output would exceed the 4 GB MP4 limit — lower resolution, quality or frame count');
+    const ftyp = box('ftyp', str('isom'), u32(512), str('isom'), str('iso2'), str('avc1'), str('mp41'));
+    const chunkOffset = ftyp.length + 8;
+    const parts = [ftyp, u32(8 + this.bytes), str('mdat')];
+    for (const s of this.samples) parts.push(s.data);
+    parts.push(this._moov(chunkOffset));
+    return new Blob(parts, { type: 'video/mp4' });
+  }
+  _moov(chunkOffset) {
+    const n = this.samples.length, dur = n * 1000;
+    const mvhd = fullBox('mvhd', 0, 0, u32(0), u32(0), u32(this.ts), u32(dur),
+      u32(0x00010000), u16(0x0100), u16(0), u32(0), u32(0), MAT_UNITY, new Uint8Array(24), u32(2));
+    const tkhd = fullBox('tkhd', 0, 3, u32(0), u32(0), u32(1), u32(0), u32(dur),
+      new Uint8Array(8), u16(0), u16(0), u16(0), u16(0), MAT_UNITY,
+      u32(this.w * 65536), u32(this.h * 65536));
+    const mdhd = fullBox('mdhd', 0, 0, u32(0), u32(0), u32(this.ts), u32(dur), u16(0x55C4), u16(0));
+    const hdlr = fullBox('hdlr', 0, 0, u32(0), str('vide'), new Uint8Array(12), str('VideoHandler\0'));
+    const vmhd = fullBox('vmhd', 0, 1, u16(0), u16(0), u16(0), u16(0));
+    const dinf = box('dinf', fullBox('dref', 0, 0, u32(1), fullBox('url ', 0, 1)));
+    const avc1 = box('avc1',
+      new Uint8Array(6), u16(1), u16(0), u16(0), new Uint8Array(12),
+      u16(this.w), u16(this.h), u32(0x00480000), u32(0x00480000), u32(0), u16(1),
+      new Uint8Array(32), u16(0x0018), u16(0xFFFF), box('avcC', this.avcC));
+    const stsd = fullBox('stsd', 0, 0, u32(1), avc1);
+    const stts = fullBox('stts', 0, 0, u32(1), u32(n), u32(1000));
+    const keys = []; this.samples.forEach((s, i) => { if (s.isKey) keys.push(i + 1); });
+    const stssBody = new Uint8Array(4 + keys.length * 4);
+    let dv = new DataView(stssBody.buffer);
+    dv.setUint32(0, keys.length);
+    keys.forEach((k, i) => dv.setUint32(4 + i * 4, k));
+    const stss = fullBox('stss', 0, 0, stssBody);
+    const stsc = fullBox('stsc', 0, 0, u32(1), u32(1), u32(n), u32(1));
+    const stszBody = new Uint8Array(8 + n * 4);
+    dv = new DataView(stszBody.buffer);
+    dv.setUint32(0, 0); dv.setUint32(4, n);
+    this.samples.forEach((s, i) => dv.setUint32(8 + i * 4, s.data.length));
+    const stsz = fullBox('stsz', 0, 0, stszBody);
+    const stco = fullBox('stco', 0, 0, u32(1), u32(chunkOffset));
+    return box('moov', mvhd,
+      box('trak', tkhd, box('mdia', mdhd, hdlr,
+        box('minf', vmhd, dinf, box('stbl', stsd, stts, stss, stsc, stsz, stco)))));
+  }
+}
+
+/* ============================================================================
+   20 · MINIMAL ZIP WRITER (stored / no compression — PNGs are already deflated)
+   ========================================================================== */
+
+const CRCT = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[i] = c >>> 0; }
+  return t;
+})();
+function crc32(a) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < a.length; i++) c = CRCT[(c ^ a[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+class ZipWriter {
+  constructor() { this.parts = []; this.dir = []; this.off = 0; }
+  add(name, data) {
+    const nb = str(name), crc = crc32(data);
+    const lh = new Uint8Array(30 + nb.length);
+    const dv = new DataView(lh.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true); dv.setUint16(6, 0, true); dv.setUint16(8, 0, true);
+    dv.setUint16(10, 0, true); dv.setUint16(12, 0x0021, true);
+    dv.setUint32(14, crc, true);
+    dv.setUint32(18, data.length, true); dv.setUint32(22, data.length, true);
+    dv.setUint16(26, nb.length, true); dv.setUint16(28, 0, true);
+    lh.set(nb, 30);
+    this.parts.push(lh, data);
+    this.dir.push({ nb, crc, size: data.length, off: this.off });
+    this.off += lh.length + data.length;
+  }
+  finalize() {
+    if (this.off > 3.6e9) throw new Error('zip would exceed 4 GB — render fewer frames or a smaller size');
+    const cd = []; let cdSize = 0;
+    for (const e of this.dir) {
+      const c = new Uint8Array(46 + e.nb.length);
+      const dv = new DataView(c.buffer);
+      dv.setUint32(0, 0x02014b50, true);
+      dv.setUint16(4, 20, true); dv.setUint16(6, 20, true);
+      dv.setUint16(8, 0, true); dv.setUint16(10, 0, true);
+      dv.setUint16(12, 0, true); dv.setUint16(14, 0x0021, true);
+      dv.setUint32(16, e.crc, true);
+      dv.setUint32(20, e.size, true); dv.setUint32(24, e.size, true);
+      dv.setUint16(28, e.nb.length, true);
+      dv.setUint32(38, 0, true);
+      dv.setUint32(42, e.off, true);
+      c.set(e.nb, 46);
+      cd.push(c); cdSize += c.length;
+    }
+    const eo = new Uint8Array(22);
+    const dv = new DataView(eo.buffer);
+    dv.setUint32(0, 0x06054b50, true);
+    dv.setUint16(8, this.dir.length, true); dv.setUint16(10, this.dir.length, true);
+    dv.setUint32(12, cdSize, true); dv.setUint32(16, this.off, true);
+    return new Blob([...this.parts, ...cd, eo], { type: 'application/zip' });
+  }
+}
+
+/* ============================================================================
+   21 · KEYBOARD
+   ========================================================================== */
+
+const SHORTCUTS = [
+  ['Viewport'],
+  ['Alt + LMB drag', 'Tumble / orbit'],
+  ['Alt + MMB drag', 'Track / pan'],
+  ['Alt + RMB drag · Wheel', 'Dolly / zoom'],
+  ['F', 'Frame selected (A = frame all)'],
+  ['V', 'Cycle single → split ◫ → split ⬓'],
+  ['C', 'Look through selected camera / back to persp'],
+  ['G · B · H · P', 'Toggle grid · gate · guides · motion paths'],
+  ['Tools'],
+  ['Q W E R', 'Pick · Move · Rotate · Scale'],
+  ['X', 'Toggle world / local gizmo space'],
+  ['Shift + click', 'Add to selection'],
+  ['Esc', 'Deselect'],
+  ['Ctrl + D', 'Duplicate'],
+  ['Del · Backspace', 'Delete selected'],
+  ['Animation'],
+  ['S', 'Set key on selected (translate, rotate, scale)'],
+  ['Shift + S', 'Delete keys at current frame'],
+  ['Space', 'Play / pause'],
+  ['← →', 'Step one frame'],
+  ['Shift + ← →', 'Jump to previous / next key'],
+  ['Home · End', 'Go to range start / end'],
+  ['Scene'],
+  ['Ctrl + Z · Ctrl + Shift + Z', 'Undo · Redo'],
+  ['Ctrl + S', 'Save scene JSON'],
+  ['Ctrl + R', 'Open the render dialog'],
+];
+function buildKeysModal() {
+  const b = $('#keysBody');
+  b.innerHTML = '';
+  for (const row of SHORTCUTS) {
+    if (row.length === 1) { b.appendChild(el('div', 'kg', row[0])); continue; }
+    const k = el('div');
+    k.innerHTML = row[0].split(' · ').map(p =>
+      p.split(' + ').map(x => '<kbd>' + x + '</kbd>').join(' + ')).join(' <span style="color:var(--dim2)">·</span> ');
+    b.append(k, el('div', null, row[1]));
+  }
+}
+
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if ($('#mExport').classList.contains('show')) { if (!exporting) closeModal('#mExport'); return; }
+    if ($('#mKeys').classList.contains('show')) { closeModal('#mKeys'); return; }
+  }
+  if (typing()) return;
+  if (exporting && !(e.ctrlKey || e.metaKey)) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (ctrl) {
+    const k = e.key.toLowerCase();
+    if (k === 'z') { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); return; }
+    if (k === 'y') { e.preventDefault(); doRedo(); return; }
+    if (k === 's') { e.preventDefault(); saveScene(); return; }
+    if (k === 'd') { e.preventDefault(); duplicateSel(); return; }
+    if (k === 'r') { e.preventDefault(); openExport(); return; }
+    if (k === 'a') { e.preventDefault(); select([...S.objects]); return; }
+    return;
+  }
+
+  switch (e.key) {
+    case 'q': case 'Q': setGizmo(null); return;
+    case 'w': case 'W': setGizmo('translate'); return;
+    case 'e': case 'E': setGizmo('rotate'); return;
+    case 'r': case 'R': setGizmo('scale'); return;
+    case 'x': case 'X':
+      S.space = S.space === 'world' ? 'local' : 'world';
+      attachGizmo(); toast('Gizmo space: ' + S.space); return;
+    case 'f': case 'F': nav.frame(S.sel); return;
+    case 'a': case 'A': nav.frame(S.objects); return;
+    case 'v': case 'V':
+      setLayout(S.layout === 'single' ? 'vsplit' : S.layout === 'vsplit' ? 'hsplit' : 'single'); return;
+    case 'c': case 'C': {
+      const o = single();
+      if (o && isCam(o)) setLookThrough(S.lookThrough === o ? null : o);
+      else if (S.lookThrough) setLookThrough(null);
+      else { const c = S.objects.find(isCam); if (c) setLookThrough(c); }
+      return;
+    }
+    case 'g': case 'G': $('#tgGrid').click(); return;
+    case 'b': case 'B': $('#tgGate').click(); return;
+    case 'h': case 'H': $('#tgGuide').click(); return;
+    case 'p': case 'P': $('#tgPath').click(); return;
+    case 's': if (e.shiftKey) return; keySelected(); return;
+    case 'S': if (e.shiftKey) { pushUndo(); for (const o of S.sel) deleteKeys(o, null); syncInspector(); return; } keySelected(); return;
+    case 'Delete': case 'Backspace': e.preventDefault(); deleteSelected(); return;
+    case 'Escape': select([]); return;
+    case ' ': e.preventDefault(); setPlaying(!S.playing); return;
+    case 'ArrowLeft': e.preventDefault(); e.shiftKey ? gotoKey(-1) : setFrame(S.cur - 1); return;
+    case 'ArrowRight': e.preventDefault(); e.shiftKey ? gotoKey(1) : setFrame(S.cur + 1); return;
+    case 'Home': setFrame(S.start); return;
+    case 'End': setFrame(S.end); return;
+  }
+});
+function keySelected() {
+  if (!S.sel.length) { toast('Nothing selected'); return; }
+  pushUndo();
+  let n = 0;
+  for (const o of S.sel) n += setKeys(o, ['t', 'r', 's'], true);
+  toast(n ? 'Keyed ' + S.sel.length + ' object' + (S.sel.length > 1 ? 's' : '') + ' @ ' + S.cur : 'Nothing keyable');
+  drawTimeline(); syncInspector();
+}
+
+/* ============================================================================
+   22 · WIRING
+   ========================================================================== */
+
+function openModal(id) { $(id).classList.add('show'); }
+function closeModal(id) { $(id).classList.remove('show'); }
+function openExport() {
+  if (exporting) return;
+  buildExportUI();
+  $('#expCancel').textContent = 'Cancel';
+  $('#expGo').textContent = 'Render';
+  $('#expGo').disabled = false;
+  openModal('#mExport');
+}
+function applyWire() {
+  for (const o of S.objects) {
+    if (isCam(o)) continue;                    // never wireframe the camera bodies
+    o.traverse(n => { if (n.isMesh && n.material && 'wireframe' in n.material) n.material.wireframe = S.wire; });
+  }
+  S.dirty = true;
+}
+function syncToolbarToggles() {
+  $('#tgGrid').classList.toggle('on', S.showGrid);
+  $('#tgGate').classList.toggle('on', S.showGate);
+  $('#tgGuide').classList.toggle('on', S.showGuides);
+  $('#tgPath').classList.toggle('on', S.showPaths);
+  $('#tgWire').classList.toggle('on', S.wire);
+  $('#tgAuto').classList.toggle('on', S.autokey);
+  $('#tgLoop').classList.toggle('on', S.loop);
+  for (const b of document.querySelectorAll('[data-lay]')) b.classList.toggle('on', b.dataset.lay === S.layout);
+}
+function syncTimelineInputs() {
+  $('#curFrame').value = S.cur;
+  $('#rangeStart').value = S.start;
+  $('#rangeEnd').value = S.end;
+  $('#fpsSel').value = String(S.fps);
+  $('#tlInfo').innerHTML = '<b>' + (S.end - S.start + 1) + '</b> f · <b>' +
+    ((S.end - S.start + 1) / S.fps).toFixed(2) + '</b> s';
+  drawTimeline();
+}
+
+function wire() {
+  for (const b of document.querySelectorAll('[data-add]'))
+    b.onclick = () => { pushUndo(); const o = addPrimitive(b.dataset.add); select([o]); rebuildOutliner(); toast('Added ' + o.userData.pname); };
+  $('#addCam').onclick = () => { pushUndo(); const c = addCamera(); select([c]); rebuildOutliner(); toast('Added ' + c.userData.pname); };
+  $('#addNull').onclick = () => { pushUndo(); const n = addNull(); select([n]); rebuildOutliner(); toast('Added ' + n.userData.pname); };
+  $('#btnDup').onclick = duplicateSel;
+  $('#btnDel').onclick = deleteSelected;
+  $('#btnKeys').onclick = () => { buildKeysModal(); openModal('#mKeys'); };
+  $('#keysClose').onclick = () => closeModal('#mKeys');
+  $('#mKeys').onclick = e => { if (e.target.id === 'mKeys') closeModal('#mKeys'); };
+  $('#btnNew').onclick = () => { pushUndo(); newScene(); };
+  $('#btnSave').onclick = saveScene;
+  $('#btnLoad').onclick = () => $('#fileIn').click();
+  $('#fileIn').onchange = async e => {
+    const f = e.target.files?.[0]; if (!f) return;
+    try { pushUndo(); loadScene(JSON.parse(await f.text())); }
+    catch (err) { toast('Could not read that file', true); }
+    e.target.value = '';
+  };
+  $('#btnExport').onclick = openExport;
+  $('#expCancel').onclick = () => { if (exporting) { exportCancel = true; expLog('stopping…'); } else closeModal('#mExport'); };
+  $('#expGo').onclick = runExport;
+
+  for (const [id, key, fn] of [
+    ['#tgGrid', 'showGrid', null], ['#tgGate', 'showGate', null],
+    ['#tgGuide', 'showGuides', null], ['#tgPath', 'showPaths', refreshAllPaths],
+    ['#tgWire', 'wire', applyWire],
+  ]) $(id).onclick = () => { S[key] = !S[key]; $(id).classList.toggle('on', S[key]); fn?.(); S.dirty = true; };
+
+  for (const b of document.querySelectorAll('[data-lay]')) b.onclick = () => setLayout(b.dataset.lay);
+  $('#povSel').onchange = e => { const c = byId(+e.target.value); if (c) setLookThrough(c); };
+
+  $('#btnPlay').onclick = () => setPlaying(!S.playing);
+  $('#btnStart').onclick = () => { setPlaying(false); setFrame(S.start); };
+  $('#btnEnd').onclick = () => { setPlaying(false); setFrame(S.end); };
+  $('#btnPrev').onclick = () => { setPlaying(false); setFrame(S.cur - 1); };
+  $('#btnNext').onclick = () => { setPlaying(false); setFrame(S.cur + 1); };
+  $('#btnKey').onclick = keySelected;
+  $('#btnKeyDel').onclick = () => { pushUndo(); for (const o of S.sel) deleteKeys(o, null); syncInspector(); };
+  $('#tgAuto').onclick = () => { S.autokey = !S.autokey; $('#tgAuto').classList.toggle('on', S.autokey); toast('Auto-key ' + (S.autokey ? 'on' : 'off')); };
+  $('#tgLoop').onclick = () => { S.loop = !S.loop; $('#tgLoop').classList.toggle('on', S.loop); };
+
+  $('#curFrame').onchange = e => setFrame(parseInt(e.target.value, 10) || S.start);
+  // when the two handles cross, move the *other* one rather than snapping back —
+  // typing an end of 5 while start is 200 means "end at 5", not "range 200-201"
+  $('#rangeStart').onchange = e => {
+    S.start = parseInt(e.target.value, 10) || 1;
+    if (S.end <= S.start) S.end = S.start + 1;
+    S.cur = clamp(S.cur, S.start, S.end); syncTimelineInputs(); setFrame(S.cur); refreshAllPaths();
+  };
+  $('#rangeEnd').onchange = e => {
+    S.end = parseInt(e.target.value, 10) || 2;
+    if (S.end <= S.start) S.start = Math.max(1, S.end - 1);
+    S.cur = clamp(S.cur, S.start, S.end); syncTimelineInputs(); setFrame(S.cur); refreshAllPaths();
+  };
+  $('#fpsSel').onchange = e => { S.fps = parseFloat(e.target.value); EX.fps = S.fps; syncTimelineInputs(); };
+
+  for (const inp of [$('#curFrame'), $('#rangeStart'), $('#rangeEnd')]) {
+    dragNum(inp, 1);
+    inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') inp.blur(); };
+  }
+  for (const b of document.querySelectorAll('[data-giz]'))
+    b.onclick = () => setGizmo(b.dataset.giz === 'pick' ? null : b.dataset.giz);
+}
+
+function newScene() {
+  for (const o of [...S.objects]) removeObject(o);
+  S.objects = []; S.sel = []; S.uid = 1; S.lookThrough = null;
+  S.cur = 1; S.start = 1; S.end = 120; S.fps = 24;
+  S.aspect = 2.39024; S.filmback = 0; S.splitPos = 0.5; S.focusPane = 0;
+  S.showGrid = true; S.showGate = true; S.showGuides = false; S.showPaths = false;
+  S.wire = false; S.autokey = false; S.space = 'world';
+  EX.camId = null; EX.fps = null; EX.aspectMode = 'shot'; EX.height = null;
+  UNDO.length = 0; REDO.length = 0;
+
+  addPrimitive('plane', { params: { w: 40, d: 40 }, name: 'Ground' });
+  const cube = addPrimitive('box', { params: { w: 2, h: 2, d: 2 }, name: 'Block_A' });
+  cube.position.set(-1.6, 1, 0);
+  const cyl = addPrimitive('cylinder', { params: { r: 0.7, h: 3.4 }, name: 'Block_B' });
+  cyl.position.set(2.2, 1.7, -1.4);
+  const fig = addPrimitive('figure', { name: 'Human_ref' });
+  fig.position.set(0.4, 0, 2.2);
+  const aim = addNull({ pos: [0, 1.4, 0], name: 'Aim_target' });
+  const cam = addCamera({ focal: 32, name: 'shotCam_A', pos: [7.5, 1.9, 9] });
+  cam.userData.aimId = aim.userData.pvid;
+
+  S.layout = 'single';
+  setLookThrough(null);
+  select([cam]);
+  syncToolbarToggles();
+  syncTimelineInputs();
+  setFrame(1);
+  // a deliberate opening view — auto-framing everything includes the 40 m ground
+  // plane and the camera rig, which zooms out until the blockout is unreadable
+  persp.position.set(9.5, 6, 12.5);
+  persp.userData.pivot.set(0, 1.1, 0);
+  persp.up.set(0, 1, 0);
+  persp.lookAt(persp.userData.pivot);
+  toast('New scene');
+}
+
+function init() {
+  $('#boot').remove();
+  $('#app').hidden = false;      // must be visible before measuring the viewport
+  wire();
+  buildKeysModal();
+  setGizmo('translate');
+  newScene();
+  resize();
+  requestAnimationFrame(tick);
+}
+init();
+</script>
+</body>
+</html>
+
